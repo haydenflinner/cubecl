@@ -59,3 +59,9 @@ Same harness, best of 3. f16/bf16 lines are still promoted per lane.
 | `compute_direct` bf16 n=128 compile | 2685 ms | 2847 ms | 73 ms |
 
 64-bit vectors (`f32x2`) stay scalarized: native x64 lowering of them failed `test_fma_from_sub`/`test_trunc`.
+
+## deadrec fix (backend: `self_feeding` used a whole-function scan per value)
+
+`PLIRON_TIMING=1` showed `deadrec` at 2124 ms of the 2425 ms pipeline for bf16 n=128.
+With one `Uses` index per pass: deadrec 4.6 ms, `compute_direct` bf16 n=128 compile
+2847 ms -> 570 ms, f16 n=128 289 ms -> 252 ms (single run). Suite: 1039 passed.
