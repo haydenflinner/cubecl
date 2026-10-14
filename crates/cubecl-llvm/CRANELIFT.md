@@ -1,0 +1,42 @@
+# Cranelift CPU JIT (`cranelift` feature) vs LLVM LLJIT
+
+Cranelift is the default when the feature is on; `CUBECL_CPU_JIT=llvm` selects LLJIT.
+`CUBECL_JIT_TIME=1` prints `cubecl-jit-time <jit> <kernel> <µs>` per compile.
+Lowering: `pliron-clif-lower` (from rustc_codegen_pliron), vectors scalarized per lane.
+
+Host: Xeon Platinum 8559C (AVX-512, AVX512-FP16), release build.
+
+## Correctness
+
+`cargo test --release -p cubecl-cpu --features cranelift`: 1039 passed, 0 failed, 20 ignored on both JITs.
+
+## Compile latency (same test suite, `--test-threads=1 --nocapture`)
+
+| | Cranelift | LLVM |
+|---|---|---|
+| kernels compiled | 1418 | 1418 |
+| total compile time | 7.05 s | 15.87 s |
+| median per kernel | 2.99 ms | 8.66 ms |
+| median ratio clif/llvm (p10 / p90) | 0.36 (0.17 / 0.97) | |
+| kernels slower on Cranelift | 137 / 1416 | |
+| worst: `transcendentals` n=8 | 137 ms | 15 ms |
+| throughput `compute_direct` bf16 n=128 | 2685 ms | 73 ms |
+| throughput `compute_direct` f16 n=128 | 285 ms | 44 ms |
+
+The slow cases are wide vectors: per-lane scalarization (plus bf16 promotion per lane) grows the function linearly in lanes.
+
+## Kernel runtime (`examples/throughput` `all`, best of 3, persistence cache cleared per run)
+
+| probe | Cranelift | LLVM | clif/llvm |
+|---|---|---|---|
+| compute-direct f32 | 31.1 GOPS | 1079 GOPS | 0.03 |
+| compute-direct f16 | 31.8 GOPS | 2056 GOPS | 0.02 |
+| compute-direct bf16 | 32.6 GOPS | 1074 GOPS | 0.03 |
+| memory copy 1 GiB | 43.8 GB/s | 58.2 GB/s | 0.75 |
+| memory read 512 MiB | 25.1 GB/s | 39.8 GB/s | 0.63 |
+| memory write 512 MiB | 49.0 GB/s | 52.8 GB/s | 0.93 |
+| launch (noisy: 4–35 µs both) | 10.6 µs | 4.5 µs | |
+
+Compute is ~30x behind because every vector op becomes scalar lane ops; LLVM uses
+512-bit FMA. Cranelift's x86 backend tops out at 128-bit SIMD, so keeping `f32x4`
+chunks native is the next step; full parity needs wider vectors than Cranelift has.
