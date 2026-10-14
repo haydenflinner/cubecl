@@ -65,3 +65,17 @@ Same harness, best of 3. f16/bf16 lines are still promoted per lane.
 `PLIRON_TIMING=1` showed `deadrec` at 2124 ms of the 2425 ms pipeline for bf16 n=128.
 With one `Uses` index per pass: deadrec 4.6 ms, `compute_direct` bf16 n=128 compile
 2847 ms -> 570 ms, f16 n=128 289 ms -> 252 ms (single run). Suite: 1039 passed.
+
+## Rejected: whole-vector bf16 promotion
+
+Promoting `<n x bf16>` arith to `<n x f32>` before scalarizing (so FMA runs as
+`fma.f32x4`; verified in the CLIF dump) passed the suite but did not pay off.
+`compute_direct`, best of 3:
+
+| | bf16 GOPS | bf16 n=128 compile |
+|---|---|---|
+| per-lane promotion (kept) | 293 | 537 ms |
+| whole-vector promotion | 298 | 778 ms |
+
+The per-lane bf16<->f32 casts (extract/insert + bit ops) dominate. A win needs bf16
+vectors carried as `i16x8` leaves so the casts are SIMD too (`uwiden` + `ishl 16`).
