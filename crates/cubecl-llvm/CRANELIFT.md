@@ -108,3 +108,21 @@ Suite passes (1039). Same session, box loaded (baseline slower than earlier tabl
 
 +35% compile time for a runtime change inside this box's noise, so it stays off by
 default. Likely cause (unverified): cubecl-opt already simplifies the IR before pliron.
+
+## ymm/zmm f32 vectors (`CUBECL_CLIF_WIDE`, default = widest the CPU has)
+
+Vendored Cranelift x64 gains `f32x8`/`f32x16` (VEX.256 / EVEX.512 load,
+store, move, splat, add/sub/mul/div, fma, lane insert/extract), enabled only
+via `WIDE_VECTOR_BITS`, which only CubeCL sets. The lowerer gives a
+`<n x f32>` type wide leaves only if every op touching it has a wide lowering.
+Suite: 1039 passed / 0 failed with 512 on. Back-to-back runs, Xeon 8559C:
+
+| GOPS | `CUBECL_CLIF_WIDE=0` (128-bit) | 512 | LLVM (earlier) |
+|---|---|---|---|
+| compute f32 | 199.8 | 804.1 | 1079 |
+| compute f16 | 230.8 | 658.7 | 2056 |
+| compute bf16 | 188.3 | 740.5 | 1074 |
+
+f32 hot loop now matches LLVM's 4x `vfmadd213ps zmm`; the remaining
+difference is the latch: we compare the pre-increment counter (`lea`, `cmp`,
+`jb`, edge `mov` + `jmp`) where LLVM does `inc`, `cmp`, `jb`.
