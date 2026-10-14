@@ -145,6 +145,8 @@ pub(crate) fn init_native() {
             .expect("failed to initialize native target");
     });
 impl PlironEngine {
+    /// `CUBECL_JIT_TIME=1` prints `cubecl-jit-time <jit> <kernel> <µs>` per
+    /// compile (pliron-llvm module in, callable kernel out).
     pub fn compile(
         ctx: &mut Context,
         module: ModuleOp,
@@ -152,6 +154,26 @@ impl PlironEngine {
         requirements: KernelRequirements,
         io: Vec<BufferIOAttr>,
         keep_object: bool,
+    ) -> pliron::result::Result<Self> {
+        let t = std::time::Instant::now();
+        let r = Self::compile_inner(ctx, module, kernel_name, requirements, io);
+        static TIME: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *TIME.get_or_init(|| std::env::var_os("CUBECL_JIT_TIME").is_some()) {
+            #[cfg(feature = "cranelift")]
+            let jit = if use_cranelift() { "cranelift" } else { "llvm" };
+            #[cfg(not(feature = "cranelift"))]
+            let jit = "llvm";
+            eprintln!("cubecl-jit-time {jit} {kernel_name} {}", t.elapsed().as_micros());
+        }
+        r
+    }
+
+    fn compile_inner(
+        ctx: &mut Context,
+        module: ModuleOp,
+        kernel_name: &str,
+        requirements: KernelRequirements,
+        io: Vec<BufferIOAttr>,
     ) -> pliron::result::Result<Self> {
         #[cfg(feature = "cranelift")]
         if use_cranelift() {

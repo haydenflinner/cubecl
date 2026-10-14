@@ -26,6 +26,7 @@ cuda-cpp = ["cuda", "cubecl/cuda-cpp"]
 hip = ["cubecl/hip"]
 rocm = ["hip"]
 cpu = ["cubecl/cpu"]
+cpu-cranelift = ["cpu", "cubecl/cpu-cranelift"]
 metal-native = ["cubecl/metal-native"]
 
 [dependencies]
