@@ -93,3 +93,18 @@ pays off. `compute_direct`, 3 runs each:
 
 Runtime is within noise on this box (the untouched f32 probe swung 169-266 GOPS
 in the same runs); the compile-time win is 3.6x. Suite: 1039 passed.
+
+## pliron-ir-opt passes before lowering (`CUBECL_CLIF_IROPT=1`, opt-in)
+
+instcombine, memcpyopt, sroa-fwd, phisimp, sroa, constload from rustc_codegen_pliron.
+Suite passes (1039). Same session, box loaded (baseline slower than earlier tables):
+
+| | off | on |
+|---|---|---|
+| test-suite compile total (1416 kernels) | 8.89 s | 11.96 s |
+| median per kernel | 3.60 ms | 5.38 ms |
+| compute f32 / f16 / bf16, best of 3 (GOPS) | 176 / 171 / 153 | 243 / 183 / 180 |
+| memory copy / read / write, best of 3 (GB/s) | 49.6 / 35.8 / 43.3 | 50.6 / 35.1 / 44.1 |
+
++35% compile time for a runtime change inside this box's noise, so it stays off by
+default. CubeCL's own IR (cubecl-opt) already does most of this before pliron.

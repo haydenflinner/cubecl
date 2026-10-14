@@ -282,7 +282,18 @@ mod cranelift {
             std::env::var("CUBECL_CLIF_SIMD").map_or(true, |v| v != "0"),
             std::sync::atomic::Ordering::Relaxed,
         );
-        let st = scan::scan(ctx, module.get_operation());
+        #[allow(unused_mut)]
+        let mut st = scan::scan(ctx, module.get_operation());
+        // rustc_codegen_pliron's pliron-IR passes (A/B: `CUBECL_CLIF_IROPT=1`).
+        if std::env::var("CUBECL_CLIF_IROPT").is_ok_and(|v| v == "1") {
+            use pliron_clif_lower::iropt::*;
+            instcombine::run(ctx, &mut st);
+            memcpyopt::run(ctx, &mut st);
+            sroa::forward(ctx, &mut st);
+            phisimp::run(ctx, &st);
+            sroa::run(ctx, &mut st);
+            constload::run(ctx, &mut st);
+        }
         #[allow(unused_mut)]
         let mut jb = cranelift_jit::JITBuilder::with_isa(
             isa.clone(),
