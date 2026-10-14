@@ -2,7 +2,8 @@
 
 Cranelift is the default when the feature is on; `CUBECL_CPU_JIT=llvm` selects LLJIT.
 `CUBECL_JIT_TIME=1` prints `cubecl-jit-time <jit> <kernel> <µs>` per compile.
-Lowering: `pliron-clif-lower` (from rustc_codegen_pliron), vectors scalarized per lane.
+Lowering: `pliron-clif-lower` (from rustc_codegen_pliron). Vectors lower as 128-bit SIMD parts
+(`WIDE_SIMD`); `CUBECL_CLIF_SIMD=0` scalarizes per lane instead (the "scalar" column).
 
 Host: Xeon Platinum 8559C (AVX-512, AVX512-FP16), release build.
 
@@ -40,3 +41,21 @@ The slow cases are wide vectors: per-lane scalarization (plus bf16 promotion per
 Compute is ~30x behind because every vector op becomes scalar lane ops; LLVM uses
 512-bit FMA. Cranelift's x86 backend tops out at 128-bit SIMD, so keeping `f32x4`
 chunks native is the next step; full parity needs wider vectors than Cranelift has.
+
+## With native SIMD (`WIDE_SIMD`, 128-bit parts; 244f680 + backend 33114dd)
+
+Same harness, best of 3. f16/bf16 lines are still promoted per lane.
+
+| | Cranelift scalar | Cranelift SIMD | LLVM |
+|---|---|---|---|
+| compute-direct f32 | 31.1 GOPS | 295 GOPS | 1079 GOPS |
+| compute-direct f16 | 31.8 GOPS | 266 GOPS | 2056 GOPS |
+| compute-direct bf16 | 32.6 GOPS | 271 GOPS | 1074 GOPS |
+| memory copy | 43.8 GB/s | 58.2 GB/s | 58.2 GB/s |
+| memory read | 25.1 GB/s | 38.7 GB/s | 39.8 GB/s |
+| memory write | 49.0 GB/s | 47.2 GB/s | 52.8 GB/s |
+| test-suite compile total | 7.05 s | 6.20 s | 15.87 s |
+| median per kernel (ratio clif/llvm, p90) | 2.99 ms (0.36, 0.97) | 2.79 ms (0.35, 0.73) | 8.66 ms |
+| `compute_direct` bf16 n=128 compile | 2685 ms | 2847 ms | 73 ms |
+
+64-bit vectors (`f32x2`) stay scalarized: native x64 lowering of them failed `test_fma_from_sub`/`test_trunc`.
