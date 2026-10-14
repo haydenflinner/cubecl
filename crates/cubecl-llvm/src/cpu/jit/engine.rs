@@ -340,7 +340,11 @@ mod cranelift {
 fn wide_bits() -> u32 {
     #[cfg(target_arch = "x86_64")]
     {
-        let cpu = if std::arch::is_x86_feature_detected!("avx512f") {
+        // F16C converts packed f16 twins of the wide f32 vectors.
+        let f16c = std::arch::is_x86_feature_detected!("f16c");
+        let cpu = if !f16c {
+            0
+        } else if std::arch::is_x86_feature_detected!("avx512f") {
             512
         } else if std::arch::is_x86_feature_detected!("avx2")
             && std::arch::is_x86_feature_detected!("fma")
