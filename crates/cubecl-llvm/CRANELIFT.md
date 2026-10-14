@@ -107,4 +107,4 @@ Suite passes (1039). Same session, box loaded (baseline slower than earlier tabl
 | memory copy / read / write, best of 3 (GB/s) | 49.6 / 35.8 / 43.3 | 50.6 / 35.1 / 44.1 |
 
 +35% compile time for a runtime change inside this box's noise, so it stays off by
-default. CubeCL's own IR (cubecl-opt) already does most of this before pliron.
+default. Likely cause (unverified): cubecl-opt already simplifies the IR before pliron.
