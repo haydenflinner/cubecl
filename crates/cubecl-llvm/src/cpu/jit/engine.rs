@@ -276,6 +276,12 @@ mod cranelift {
             use pliron::printable::Printable;
             eprintln!("==== {kernel_name} (pliron) ====\n{}", module.get_operation().disp(ctx));
         }
+        // Lines are up to 128 lanes: keep them as 128-bit SIMD parts rather
+        // than per-lane scalars. `CUBECL_CLIF_SIMD=0` scalarizes (ablation).
+        pliron_clif_lower::types::WIDE_SIMD.store(
+            std::env::var("CUBECL_CLIF_SIMD").map_or(true, |v| v != "0"),
+            std::sync::atomic::Ordering::Relaxed,
+        );
         let st = scan::scan(ctx, module.get_operation());
         #[allow(unused_mut)]
         let mut jb = cranelift_jit::JITBuilder::with_isa(
