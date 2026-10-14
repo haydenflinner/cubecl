@@ -283,7 +283,12 @@ mod cranelift {
             std::sync::atomic::Ordering::Relaxed,
         );
         #[allow(unused_mut)]
-        let mut st = scan::scan(ctx, module.get_operation());
+        let wide = super::wide_bits();
+    pliron_clif_lower::types::WIDE_F32_BITS.store(wide, std::sync::atomic::Ordering::Relaxed);
+    #[cfg(target_arch = "x86_64")]
+    cranelift_codegen::isa::x64::WIDE_VECTOR_BITS
+        .store(wide.max(128), std::sync::atomic::Ordering::Relaxed);
+    let mut st = scan::scan(ctx, module.get_operation());
         // rustc_codegen_pliron's pliron-IR passes (A/B: `CUBECL_CLIF_IROPT=1`).
         if std::env::var("CUBECL_CLIF_IROPT").is_ok_and(|v| v == "1") {
             use pliron_clif_lower::iropt::*;
@@ -327,4 +332,32 @@ mod cranelift {
         let addr = jit.get_finalized_function(id);
         (jit, addr)
     }
+}
+
+/// Widest f32 vector leaf (ymm = 256, zmm = 512) for this CPU; 0 = 128-bit
+/// SIMD only. `CUBECL_CLIF_WIDE=0|256|512` overrides (capped by the CPU).
+#[cfg(feature = "cranelift")]
+fn wide_bits() -> u32 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        let cpu = if std::arch::is_x86_feature_detected!("avx512f") {
+            512
+        } else if std::arch::is_x86_feature_detected!("avx2")
+            && std::arch::is_x86_feature_detected!("fma")
+        {
+            256
+        } else {
+            0
+        };
+        let want = std::env::var("CUBECL_CLIF_WIDE")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(512);
+        if std::env::var("CUBECL_CLIF_SIMD").is_ok_and(|v| v == "0") {
+            return 0;
+        }
+        cpu.min(want)
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    0
 }
