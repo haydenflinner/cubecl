@@ -79,3 +79,17 @@ Promoting `<n x bf16>` arith to `<n x f32>` before scalarizing (so FMA runs as
 
 The per-lane bf16<->f32 casts (extract/insert + bit ops) dominate. A win needs bf16
 vectors carried as `i16x8` leaves so the casts are SIMD too (`uwiden` + `ishl 16`).
+
+## bf16 vectors as `i16x8` leaves (SIMD casts)
+
+128-bit bf16 vectors are `i16x8` bit patterns; casts to/from `<n x f32>` are
+`uwiden`+`ishl` / RNE shift+`unarrow`, and the whole-vector promotion above now
+pays off. `compute_direct`, 3 runs each:
+
+| | bf16 GOPS (runs) | bf16 n=128 compile (runs) |
+|---|---|---|
+| per-lane casts | 248 / 172 / 166 | 573 / 600 / 570 ms |
+| `i16x8` + SIMD casts | 262 / 168 / 189 | 157 / 180 / 157 ms |
+
+Runtime is within noise on this box (the untouched f32 probe swung 169-266 GOPS
+in the same runs); the compile-time win is 3.6x. Suite: 1039 passed.
