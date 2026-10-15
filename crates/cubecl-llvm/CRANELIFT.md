@@ -152,3 +152,25 @@ Suite: 1039 passed / 0 failed / 20 ignored. Alternating runs, Xeon 8559C:
 f16 by width (native, n=64 = 8 zmm FMAs): 545 GOPS with libcalls, 1425 with F16C
 (LLVM's n=64 is 1432). LLVM's best f16 is n=128 at 1906, using 16 zmm accumulators
 in zmm0-31. Reaching that needs zmm16-31 in Cranelift's allocator.
+
+## zmm16-31
+
+In 512-bit wide mode, the vendored Cranelift now allocates xmm/zmm16-31.
+`PLIRON_NO_HIGH_XMM=1` turns this off. Non-EVEX instructions have their xmm
+operands limited to registers 0-15 (regalloc2 `Limit(16)`). EVEX r/m operands
+get the X bit, moves to or from high registers use `vmovups zmm`, and xmm16-31
+are call-clobbered. The runtime reports 32 vector registers again, so the probe
+also picks f32 n=64 and f16 n=128. The f16 n=128 loop is 16 independent
+`vfmadd213ph zmm` with no spills.
+
+Suite: 1039 passed / 0 failed / 20 ignored. Alternating runs on a slower box state
+than the table above (LLVM f16 1.2 TOPS here vs 1.45-2.0 before):
+
+| GOPS | zmm0-31 (2 runs) | `PLIRON_NO_HIGH_XMM=1` | LLVM |
+|---|---|---|---|
+| compute f32 | 523 / 618 | 563 / 676 | 535 / 538 |
+| compute f16 | 1216 / 1240 | 953 / 982 | 1178 / 1214 |
+| compute bf16 | 536 / 665 | 790 / 560 | 473 / 470 |
+
+Compile time is unchanged for the 20 kernels both modes build (340 ms vs 347 ms,
+minimum of 2 runs each). The three extra wide kernels cost 26-170 ms each.

@@ -202,10 +202,10 @@ fn run_pipeline(ir: &str) -> Result<String, String> {
 }
 
 /// Vector registers the active JIT allocates, when fewer than the ISA has:
-/// Cranelift x64 uses xmm0-15 only, so zmm16-31 kernels would spill.
+/// Cranelift x64 allocates zmm16-31 only in 512-bit wide mode.
 pub fn vector_register_cap() -> Option<u32> {
     #[cfg(feature = "cranelift")]
-    if use_cranelift() {
+    if use_cranelift() && (wide_bits() < 512 || std::env::var_os("PLIRON_NO_HIGH_XMM").is_some()) {
         return Some(16);
     }
     None
