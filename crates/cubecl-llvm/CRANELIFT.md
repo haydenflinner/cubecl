@@ -1,197 +1,80 @@
-# Cranelift CPU JIT (`cranelift` feature) vs LLVM LLJIT
+# Cranelift CPU JIT
 
-Cranelift is the default when the feature is on; `CUBECL_CPU_JIT=llvm` selects LLJIT.
-`CUBECL_JIT_TIME=1` prints `cubecl-jit-time <jit> <kernel> <µs>` per compile.
-Lowering: `pliron-clif-lower` (from rustc_codegen_pliron). Vectors lower as 128-bit SIMD parts
-(`WIDE_SIMD`); `CUBECL_CLIF_SIMD=0` scalarizes per lane instead (the "scalar" column).
+cubecl-cpu compiles kernels with a pure-Rust JIT by default. CubeCL's pliron-llvm
+IR is lowered straight to Cranelift by `pliron-clif-lower` (from
+rustc_codegen_pliron), running our CLIF optimizer and a vendored Cranelift whose
+x64 backend has these extensions:
 
-Host: Xeon Platinum 8559C (AVX-512, AVX512-FP16), release build.
+- 256/512-bit vectors (VEX.256 / EVEX.512) and all 32 vector registers (zmm16-31);
+- native AVX512-FP16 arithmetic (`vaddph`..`vfmadd213ph`, xmm/ymm/zmm);
+- packed F16C conversion (`vcvtph2ps` / `vcvtps2ph`), scalar and vector;
+- AVX512-BF16 rounding (`vcvtneps2bf16`).
 
-## Correctness
+Nothing has to be enabled. Every feature is picked from CPUID at startup and falls
+back to 128-bit SIMD or scalar code on CPUs without it. LLVM LLJIT is still built:
+`CUBECL_CPU_JIT=llvm` selects it, and so does building without the `cranelift`
+feature.
 
-`cargo test --release -p cubecl-cpu --features cranelift`: 1039 passed, 0 failed, 20 ignored on both JITs.
+## Performance vs LLVM LLJIT
 
-## Compile latency (same test suite, `--test-threads=1 --nocapture`)
+Xeon Platinum 8559C, release build. Throughput is `examples/throughput all`, 3
+alternating runs with `~/.cache/cubecl` and `target/environment` cleared before each.
+Each cell is best (worst).
 
 | | Cranelift | LLVM |
 |---|---|---|
-| kernels compiled | 1418 | 1418 |
-| total compile time | 7.05 s | 15.87 s |
-| median per kernel | 2.99 ms | 8.66 ms |
-| median ratio clif/llvm (p10 / p90) | 0.36 (0.17 / 0.97) | |
-| kernels slower on Cranelift | 137 / 1416 | |
-| worst: `transcendentals` n=8 | 137 ms | 15 ms |
-| throughput `compute_direct` bf16 n=128 | 2685 ms | 73 ms |
-| throughput `compute_direct` f16 n=128 | 285 ms | 44 ms |
+| compute-direct f32 | 2.03 (1.41) TOPS | 2.03 (1.42) TOPS |
+| compute-direct f16 | 4.00 (3.38) TOPS | 4.06 (4.03) TOPS |
+| compute-direct bf16 | 2.02 (2.00) TOPS | 2.02 (1.75) TOPS |
+| bf16-operand kernels ¹ | 95-105 GOPS | 44-45 GOPS |
+| memory copy 1 GiB | 98.2 (91.4) GB/s | 100.8 (99.1) GB/s |
+| memory read 512 MiB | 77.4 (75.4) GB/s | 79.1 (77.1) GB/s |
+| memory write 512 MiB | 92.3 (87.6) GB/s | 91.3 (89.8) GB/s |
+| launch | 3.68 (4.04) µs | 3.57 (3.77) µs |
+| compile, whole test suite (1432 kernels, 1 thread) | 5.58 s | 11.16 s |
+| compile, median / p90 / max per kernel | 2.7 / 6.3 / 110 ms | 7.1 / 9.5 / 356 ms |
+| `cargo test --release -p cubecl-cpu` | 1039 pass, 0 fail | 1039 pass, 0 fail |
 
-The slow cases are wide vectors: per-lane scalarization (plus bf16 promotion per lane) grows the function linearly in lanes.
+Compute and memory are within run-to-run noise of LLVM: the slow outliers show up
+in both columns. Compiles are about 2x faster.
 
-## Kernel runtime (`examples/throughput` `all`, best of 3, persistence cache cleared per run)
+¹ The headline bf16 row runs on an f32-accumulator kernel, so it measures f32. The
+kernels whose operands really are bf16 only show up in the probe's per-width output
+(best of 8 widths). Those numbers come from a separate, slower session, so compare
+the two columns, not other rows.
 
-| probe | Cranelift | LLVM | clif/llvm |
-|---|---|---|---|
-| compute-direct f32 | 31.1 GOPS | 1079 GOPS | 0.03 |
-| compute-direct f16 | 31.8 GOPS | 2056 GOPS | 0.02 |
-| compute-direct bf16 | 32.6 GOPS | 1074 GOPS | 0.03 |
-| memory copy 1 GiB | 43.8 GB/s | 58.2 GB/s | 0.75 |
-| memory read 512 MiB | 25.1 GB/s | 39.8 GB/s | 0.63 |
-| memory write 512 MiB | 49.0 GB/s | 52.8 GB/s | 0.93 |
-| launch (noisy: 4–35 µs both) | 10.6 µs | 4.5 µs | |
+## Semantics differences from LLVM
 
-Compute is ~30x behind because every vector op becomes scalar lane ops; LLVM uses
-512-bit FMA. Cranelift's x86 backend tops out at 128-bit SIMD, so keeping `f32x4`
-chunks native is the next step; full parity needs wider vectors than Cranelift has.
+- bf16 FMA is one fused f32 FMA with a single rounding. LLVM multiplies, rounds,
+  adds and rounds again. Ours is more precise, but the bits differ.
+- On AVX512-BF16 CPUs, `vcvtneps2bf16` flushes subnormal f32 inputs to zero
+  (`1e-40` -> `0000`). LLVM uses the same instruction. The fallback rounding keeps
+  them (`0001`). Normals, ties, inf and NaN are bit-identical on both paths.
 
-## With native SIMD (`WIDE_SIMD`, 128-bit parts; 244f680 + backend 33114dd)
+## Opt-outs (for A/B and bisecting)
 
-Same harness, best of 3. f16/bf16 lines are still promoted per lane.
+| env | effect |
+|---|---|
+| `CUBECL_CPU_JIT=llvm` | LLVM LLJIT |
+| `CUBECL_CLIF_WIDE=0\|256\|512` | widest f32 vector (default: widest the CPU has) |
+| `CUBECL_CLIF_SIMD=0` | split vectors per lane |
+| `CUBECL_CLIF_FP16=0` | f16 math via f32 |
+| `CUBECL_CLIF_F16C=0` | f16 casts via compiler-builtins libcalls |
+| `CUBECL_CLIF_BF16=0` | bf16 rounding via integer ops, 128-bit |
+| `PLIRON_NO_HIGH_XMM=1` | only xmm0-15 |
+| `PLIRON_POSTINC_NE=0` | no latch rewrite (compare after increment) |
 
-| | Cranelift scalar | Cranelift SIMD | LLVM |
-|---|---|---|---|
-| compute-direct f32 | 31.1 GOPS | 295 GOPS | 1079 GOPS |
-| compute-direct f16 | 31.8 GOPS | 266 GOPS | 2056 GOPS |
-| compute-direct bf16 | 32.6 GOPS | 271 GOPS | 1074 GOPS |
-| memory copy | 43.8 GB/s | 58.2 GB/s | 58.2 GB/s |
-| memory read | 25.1 GB/s | 38.7 GB/s | 39.8 GB/s |
-| memory write | 49.0 GB/s | 47.2 GB/s | 52.8 GB/s |
-| test-suite compile total | 7.05 s | 6.20 s | 15.87 s |
-| median per kernel (ratio clif/llvm, p90) | 2.99 ms (0.36, 0.97) | 2.79 ms (0.35, 0.73) | 8.66 ms |
-| `compute_direct` bf16 n=128 compile | 2685 ms | 2847 ms | 73 ms |
+## Opt-in
 
-64-bit vectors (`f32x2`) stay scalarized: native x64 lowering of them failed `test_fma_from_sub`/`test_trunc`.
+`CUBECL_CLIF_IROPT=1` runs rustc_codegen_pliron's pliron-IR passes (instcombine,
+memcpyopt, sroa, phisimp, constload) before lowering. They are off because they
+show no runtime gain (f32/f16/bf16 2.02 / 4.03 / 2.03 TOPS, best of 3, in the runs
+above) and they cost about 35% more compile time. CubeCL's own optimizer has already
+simplified the IR by then.
 
-## deadrec fix (backend: `self_feeding` used a whole-function scan per value)
+## Debugging
 
-`PLIRON_TIMING=1` showed `deadrec` at 2124 ms of the 2425 ms pipeline for bf16 n=128.
-With one `Uses` index per pass: deadrec 4.6 ms, `compute_direct` bf16 n=128 compile
-2847 ms -> 570 ms, f16 n=128 289 ms -> 252 ms (single run). Suite: 1039 passed.
-
-## Rejected: whole-vector bf16 promotion
-
-Promoting `<n x bf16>` arith to `<n x f32>` before scalarizing (so FMA runs as
-`fma.f32x4`; verified in the CLIF dump) passed the suite but did not pay off.
-`compute_direct`, best of 3:
-
-| | bf16 GOPS | bf16 n=128 compile |
-|---|---|---|
-| per-lane promotion (kept) | 293 | 537 ms |
-| whole-vector promotion | 298 | 778 ms |
-
-The per-lane bf16<->f32 casts (extract/insert + bit ops) dominate. A win needs bf16
-vectors carried as `i16x8` leaves so the casts are SIMD too (`uwiden` + `ishl 16`).
-
-## bf16 vectors as `i16x8` leaves (SIMD casts)
-
-128-bit bf16 vectors are `i16x8` bit patterns; casts to/from `<n x f32>` are
-`uwiden`+`ishl` / RNE shift+`unarrow`, and the whole-vector promotion above now
-pays off. `compute_direct`, 3 runs each:
-
-| | bf16 GOPS (runs) | bf16 n=128 compile (runs) |
-|---|---|---|
-| per-lane casts | 248 / 172 / 166 | 573 / 600 / 570 ms |
-| `i16x8` + SIMD casts | 262 / 168 / 189 | 157 / 180 / 157 ms |
-
-Runtime is within noise on this box (the untouched f32 probe swung 169-266 GOPS
-in the same runs); the compile-time win is 3.6x. Suite: 1039 passed.
-
-## pliron-ir-opt passes before lowering (`CUBECL_CLIF_IROPT=1`, opt-in)
-
-instcombine, memcpyopt, sroa-fwd, phisimp, sroa, constload from rustc_codegen_pliron.
-Suite passes (1039). Same session, box loaded (baseline slower than earlier tables):
-
-| | off | on |
-|---|---|---|
-| test-suite compile total (1416 kernels) | 8.89 s | 11.96 s |
-| median per kernel | 3.60 ms | 5.38 ms |
-| compute f32 / f16 / bf16, best of 3 (GOPS) | 176 / 171 / 153 | 243 / 183 / 180 |
-| memory copy / read / write, best of 3 (GB/s) | 49.6 / 35.8 / 43.3 | 50.6 / 35.1 / 44.1 |
-
-+35% compile time for a runtime change inside this box's noise, so it stays off by
-default. Likely cause (unverified): cubecl-opt already simplifies the IR before pliron.
-
-## ymm/zmm f32 vectors (`CUBECL_CLIF_WIDE`, default = widest the CPU has)
-
-Vendored Cranelift x64 gains `f32x8`/`f32x16` (VEX.256 / EVEX.512 load,
-store, move, splat, add/sub/mul/div, fma, lane insert/extract), enabled only
-via `WIDE_VECTOR_BITS`, which only CubeCL sets. The lowerer gives a
-`<n x f32>` type wide leaves only if every op touching it has a wide lowering.
-Suite: 1039 passed / 0 failed with 512 on. Back-to-back runs, Xeon 8559C:
-
-| GOPS | `CUBECL_CLIF_WIDE=0` (128-bit) | 512 | LLVM (earlier) |
-|---|---|---|---|
-| compute f32 | 199.8 | 804.1 | 1079 |
-| compute f16 | 230.8 | 658.7 | 2056 |
-| compute bf16 | 188.3 | 740.5 | 1074 |
-
-f32 hot loop now matches LLVM's 4x `vfmadd213ps zmm`; the remaining
-difference is the latch: we compare the pre-increment counter (`lea`, `cmp`,
-`jb`, edge `mov` + `jmp`) where LLVM does `inc`, `cmp`, `jb`.
-
-## Native FP16 zmm + scalar F16C casts
-
-- Packed f16 (`vcvtph2ps`/`vcvtps2ph` ymm/zmm) and native AVX512-FP16
-  (`vaddph`/`vsubph`/`vmulph`/`vdivph`/`vfmadd213ph`, xmm/ymm/zmm) in the vendored
-  Cranelift. `CUBECL_CLIF_FP16=0` sends f16 math back through f32.
-- The hot loop was already right (8 independent `vfmadd213ph zmm`, bytes match
-  `as`), but perf showed ~40-60% of samples in `__extendhfsf2`: per-unit lane setup
-  did scalar f16 casts as libcalls. These now use F16C `vcvtph2ps`/`vcvtps2ph` on
-  xmm (`CUBECL_CLIF_F16C=0` = libcalls).
-- Under Cranelift the runtime reports 16 vector registers (x64 allocates
-  xmm0-15 only), so the probe stops picking widths that need zmm16-31 and spill.
-- The bench cache is `~/.cache/cubecl/default.db`; clear it before every run.
-
-Suite: 1039 passed / 0 failed / 20 ignored. Alternating runs, Xeon 8559C:
-
-| GOPS | F16C on (2 runs) | `CUBECL_CLIF_F16C=0` | LLVM (2 runs) |
-|---|---|---|---|
-| compute f32 | 794 / 736 | 898 | 769 / 953 |
-| compute f16 | 1560 / 1481 | 862 | 1448 / 1686 |
-| compute bf16 | 819 / 701 | 851 | 835 / 943 |
-| whole probe | 6.2 s / 7.5 s | 237 s | 6.1 s / 6.5 s |
-
-f16 by width (native, n=64 = 8 zmm FMAs): 545 GOPS with libcalls, 1425 with F16C
-(LLVM's n=64 is 1432). LLVM's best f16 is n=128 at 1906, using 16 zmm accumulators
-in zmm0-31. Reaching that needs zmm16-31 in Cranelift's allocator.
-
-## zmm16-31
-
-In 512-bit wide mode, the vendored Cranelift now allocates xmm/zmm16-31.
-`PLIRON_NO_HIGH_XMM=1` turns this off. Non-EVEX instructions have their xmm
-operands limited to registers 0-15 (regalloc2 `Limit(16)`). EVEX r/m operands
-get the X bit, moves to or from high registers use `vmovups zmm`, and xmm16-31
-are call-clobbered. The runtime reports 32 vector registers again, so the probe
-also picks f32 n=64 and f16 n=128. The f16 n=128 loop is 16 independent
-`vfmadd213ph zmm` with no spills.
-
-Suite: 1039 passed / 0 failed / 20 ignored. Alternating runs on a slower box state
-than the table above (LLVM f16 1.2 TOPS here vs 1.45-2.0 before):
-
-| GOPS | zmm0-31 (2 runs) | `PLIRON_NO_HIGH_XMM=1` | LLVM |
-|---|---|---|---|
-| compute f32 | 523 / 618 | 563 / 676 | 535 / 538 |
-| compute f16 | 1216 / 1240 | 953 / 982 | 1178 / 1214 |
-| compute bf16 | 536 / 665 | 790 / 560 | 473 / 470 |
-
-Compile time is unchanged for the 20 kernels both modes build (340 ms vs 347 ms,
-minimum of 2 runs each). The three extra wide kernels cost 26-170 ms each.
-
-## Native bf16 (`CUBECL_CLIF_BF16=0` = 128-bit integer rounding)
-
-With AVX512-BF16+BW+VL, wide bf16 vectors become packed 16-bit leaves next to
-their f32x8/f32x16 twins. f32->bf16 is `vcvtneps2bf16` (ymm/zmm), and bf16->f32 is
-`vpmovzxwd` + `vpslld 16`. bf16 lane building (insertelement / shuffle) moves to
-the f32 twin, as it already does for f16. Suite: 1039 / 0 / 20.
-
-The headline bf16 row is measured on the f32-accumulator kernel, so it tracks f32.
-The kernels whose operands are bf16 are the ones this changes (best of their 8 widths):
-
-| GOPS (2 alternating runs) | native bf16 | `CUBECL_CLIF_BF16=0` | LLVM |
-|---|---|---|---|
-| bf16-operand compute | 94.6 / 105.4 | 14.6 / 16.3 | 44.3 / 45.1 |
-
-LLVM reached 71-77 on the same kernels in an earlier session.
-
-`vcvtneps2bf16` vs the integer rounding, checked on this CPU: normals, ties, inf
-and NaN (quieted, sign and payload kept) are bit-identical. Subnormal f32 inputs
-flush to zero (`1e-40` -> `0000`, emulation `0001`). This matches LLVM, which uses
-the same instruction.
+`CUBECL_JIT_TIME=1` prints per-kernel compile µs. `CUBECL_CLIF_DUMP=1` dumps the
+pliron IR. `PLIRON_CLIF=<substr>` / `PLIRON_VCODE=<substr>` dump CLIF and machine
+code. `PLIRON_TIMING=1` prints pass times. `CUBECL_DEBUG_PLIRON=<dir>` writes the
+LLVM IR before and after O3.
