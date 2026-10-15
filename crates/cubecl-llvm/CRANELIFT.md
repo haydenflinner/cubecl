@@ -190,3 +190,8 @@ The kernels whose operands are bf16 are the ones this changes (best of their 8 w
 | bf16-operand compute | 94.6 / 105.4 | 14.6 / 16.3 | 44.3 / 45.1 |
 
 LLVM reached 71-77 on the same kernels in an earlier session.
+
+`vcvtneps2bf16` vs the integer rounding, checked on this CPU: normals, ties, inf
+and NaN (quieted, sign and payload kept) are bit-identical. Subnormal f32 inputs
+flush to zero (`1e-40` -> `0000`, emulation `0001`). This matches LLVM, which uses
+the same instruction.
