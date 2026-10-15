@@ -126,3 +126,29 @@ Suite: 1039 passed / 0 failed with 512 on. Back-to-back runs, Xeon 8559C:
 f32 hot loop now matches LLVM's 4x `vfmadd213ps zmm`; the remaining
 difference is the latch: we compare the pre-increment counter (`lea`, `cmp`,
 `jb`, edge `mov` + `jmp`) where LLVM does `inc`, `cmp`, `jb`.
+
+## Native FP16 zmm + scalar F16C casts
+
+- Packed f16 (`vcvtph2ps`/`vcvtps2ph` ymm/zmm) and native AVX512-FP16
+  (`vaddph`/`vsubph`/`vmulph`/`vdivph`/`vfmadd213ph`, xmm/ymm/zmm) in the vendored
+  Cranelift. `CUBECL_CLIF_FP16=0` sends f16 math back through f32.
+- The hot loop was already right (8 independent `vfmadd213ph zmm`, bytes match
+  `as`), but perf showed ~40-60% of samples in `__extendhfsf2`: per-unit lane setup
+  did scalar f16 casts as libcalls. These now use F16C `vcvtph2ps`/`vcvtps2ph` on
+  xmm (`CUBECL_CLIF_F16C=0` = libcalls).
+- Under Cranelift the runtime reports 16 vector registers (x64 allocates
+  xmm0-15 only), so the probe stops picking widths that need zmm16-31 and spill.
+- The bench cache is `~/.cache/cubecl/default.db`; clear it before every run.
+
+Suite: 1039 passed / 0 failed / 20 ignored. Alternating runs, Xeon 8559C:
+
+| GOPS | F16C on (2 runs) | `CUBECL_CLIF_F16C=0` | LLVM (2 runs) |
+|---|---|---|---|
+| compute f32 | 794 / 736 | 898 | 769 / 953 |
+| compute f16 | 1560 / 1481 | 862 | 1448 / 1686 |
+| compute bf16 | 819 / 701 | 851 | 835 / 943 |
+| whole probe | 6.2 s / 7.5 s | 237 s | 6.1 s / 6.5 s |
+
+f16 by width (native, n=64 = 8 zmm FMAs): 545 GOPS with libcalls, 1425 with F16C
+(LLVM's n=64 is 1432). LLVM's best f16 is n=128 at 1906, using 16 zmm accumulators
+in zmm0-31. Reaching that needs zmm16-31 in Cranelift's allocator.

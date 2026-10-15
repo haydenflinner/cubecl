@@ -201,6 +201,16 @@ fn run_pipeline(ir: &str) -> Result<String, String> {
     Ok(module.print())
 }
 
+/// Vector registers the active JIT allocates, when fewer than the ISA has:
+/// Cranelift x64 uses xmm0-15 only, so zmm16-31 kernels would spill.
+pub fn vector_register_cap() -> Option<u32> {
+    #[cfg(feature = "cranelift")]
+    if use_cranelift() {
+        return Some(16);
+    }
+    None
+}
+
 /// `CUBECL_CPU_JIT=llvm` switches a `cranelift` build back to LLJIT.
 #[cfg(feature = "cranelift")]
 fn use_cranelift() -> bool {
@@ -288,6 +298,20 @@ mod cranelift {
     #[cfg(target_arch = "x86_64")]
     cranelift_codegen::isa::x64::WIDE_VECTOR_BITS
         .store(wide.max(128), std::sync::atomic::Ordering::Relaxed);
+    #[cfg(target_arch = "x86_64")]
+    {
+        // f16 vector arithmetic in f16 on ymm (AVX512-FP16 + VL); `CUBECL_CLIF_FP16=0` = via f32.
+        let fp16 = wide >= 512
+            && std::arch::is_x86_feature_detected!("avx512fp16")
+            && std::arch::is_x86_feature_detected!("avx512vl")
+            && !std::env::var("CUBECL_CLIF_FP16").is_ok_and(|v| v == "0");
+        pliron_clif_lower::types::NATIVE_F16.store(fp16, std::sync::atomic::Ordering::Relaxed);
+        cranelift_codegen::isa::x64::NATIVE_FP16.store(fp16, std::sync::atomic::Ordering::Relaxed);
+        // Scalar f16 casts in-register; `CUBECL_CLIF_F16C=0` = compiler-builtins libcalls.
+        let f16c = std::arch::is_x86_feature_detected!("f16c")
+            && !std::env::var("CUBECL_CLIF_F16C").is_ok_and(|v| v == "0");
+        pliron_clif_lower::types::F16C.store(f16c, std::sync::atomic::Ordering::Relaxed);
+    }
     let mut st = scan::scan(ctx, module.get_operation());
         // rustc_codegen_pliron's pliron-IR passes (A/B: `CUBECL_CLIF_IROPT=1`).
         if std::env::var("CUBECL_CLIF_IROPT").is_ok_and(|v| v == "1") {

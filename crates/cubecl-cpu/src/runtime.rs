@@ -128,9 +128,10 @@ fn host_vector_registers() -> HostVectorRegisters {
     } else {
         (128, 16)
     };
+    let cap = cubecl_llvm::cpu::jit::engine::vector_register_cap().unwrap_or(count);
     HostVectorRegisters {
         width,
-        count: Some(count),
+        count: Some(count.min(cap)),
     }
 }
 
