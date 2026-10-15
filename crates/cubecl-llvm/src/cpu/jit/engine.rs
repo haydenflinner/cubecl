@@ -311,6 +311,14 @@ mod cranelift {
         let f16c = std::arch::is_x86_feature_detected!("f16c")
             && !std::env::var("CUBECL_CLIF_F16C").is_ok_and(|v| v == "0");
         pliron_clif_lower::types::F16C.store(f16c, std::sync::atomic::Ordering::Relaxed);
+        // Wide bf16 vectors packed, rounded by `vcvtneps2bf16`; `CUBECL_CLIF_BF16=0` = 128-bit emulation.
+        let bf16 = wide >= 256
+            && std::arch::is_x86_feature_detected!("avx512bf16")
+            && std::arch::is_x86_feature_detected!("avx512bw")
+            && std::arch::is_x86_feature_detected!("avx512vl")
+            && !std::env::var("CUBECL_CLIF_BF16").is_ok_and(|v| v == "0");
+        pliron_clif_lower::types::NATIVE_BF16.store(bf16, std::sync::atomic::Ordering::Relaxed);
+        cranelift_codegen::isa::x64::NATIVE_BF16.store(bf16, std::sync::atomic::Ordering::Relaxed);
     }
     let mut st = scan::scan(ctx, module.get_operation());
         // rustc_codegen_pliron's pliron-IR passes (A/B: `CUBECL_CLIF_IROPT=1`).
