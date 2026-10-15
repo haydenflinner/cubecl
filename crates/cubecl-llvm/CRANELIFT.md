@@ -174,3 +174,19 @@ than the table above (LLVM f16 1.2 TOPS here vs 1.45-2.0 before):
 
 Compile time is unchanged for the 20 kernels both modes build (340 ms vs 347 ms,
 minimum of 2 runs each). The three extra wide kernels cost 26-170 ms each.
+
+## Native bf16 (`CUBECL_CLIF_BF16=0` = 128-bit integer rounding)
+
+With AVX512-BF16+BW+VL, wide bf16 vectors become packed 16-bit leaves next to
+their f32x8/f32x16 twins. f32->bf16 is `vcvtneps2bf16` (ymm/zmm), and bf16->f32 is
+`vpmovzxwd` + `vpslld 16`. bf16 lane building (insertelement / shuffle) moves to
+the f32 twin, as it already does for f16. Suite: 1039 / 0 / 20.
+
+The headline bf16 row is measured on the f32-accumulator kernel, so it tracks f32.
+The kernels whose operands are bf16 are the ones this changes (best of their 8 widths):
+
+| GOPS (2 alternating runs) | native bf16 | `CUBECL_CLIF_BF16=0` | LLVM |
+|---|---|---|---|
+| bf16-operand compute | 94.6 / 105.4 | 14.6 / 16.3 | 44.3 / 45.1 |
+
+LLVM reached 71-77 on the same kernels in an earlier session.
