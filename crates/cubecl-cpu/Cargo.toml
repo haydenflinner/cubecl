@@ -23,7 +23,9 @@ default = [
     "cubecl-common/default",
     "cubecl-core/default",
     "cubecl-llvm/default",
+    "cranelift",
 ]
+# Pure-Rust Cranelift JIT (default). Without it, or with CUBECL_CPU_JIT=llvm, LLVM LLJIT.
 cranelift = ["cubecl-llvm/cranelift"]
 
 pliron-dump = ["cubecl-llvm/pliron-dump"]
