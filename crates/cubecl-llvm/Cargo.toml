@@ -53,7 +53,7 @@ half = { workspace = true }
 pliron = { workspace = true, features = ["std"] }
 pliron-llvm = { workspace = true, features = ["llvm-sys"] }
 thiserror = { workspace = true }
-pliron-clif-lower = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a", optional = true }
+pliron-clif-lower = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "b4efeef18a286e67746b2a0652396e4d3121836d", optional = true }
 cranelift-codegen = { version = "0.135.5", optional = true }
 cranelift-jit = { version = "0.135.5", optional = true }
 cranelift-module = { version = "0.135.5", optional = true }
