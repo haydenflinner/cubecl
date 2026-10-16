@@ -16,7 +16,9 @@ use cubecl_opt::passes::alloc_shared_memory::SliceSharedOp;
 use itertools::Itertools;
 use pliron::{
     arg_err,
-    attribute::AttrObj,
+    attribute::{AttrObj, boxed_attr_cast},
+    builtin::attr_interfaces::TypedAttrInterface,
+    r#type::Typed,
     builtin::{attributes::TypeAttr, ops::ConstantOp},
     opts::mem2reg::{AllocInfo, PromotableAllocationInterface},
 };
@@ -99,7 +101,7 @@ impl PromotableAllocationInterface for DeclareLocalOp {
     fn alloc_info(&self, ctx: &Context) -> Vec<AllocInfo> {
         vec![AllocInfo {
             ptr: self.get_result(ctx),
-            ty: self.value_ty(ctx).get_type(ctx),
+            ty: Typed::get_type(&*self.value_ty(ctx), ctx),
         }]
     }
 
@@ -113,7 +115,10 @@ impl PromotableAllocationInterface for DeclareLocalOp {
             return arg_err!(self.loc(ctx), UnrelatedAllocInfo);
         }
         if let Some(initializer) = self.initializer(ctx).map(|it| it.clone()) {
-            let constant = ConstantOp::new(ctx, initializer);
+            let constant = ConstantOp::new(
+                ctx,
+                boxed_attr_cast::<dyn TypedAttrInterface>(initializer).unwrap(),
+            );
             inserter.insert_op(ctx, &constant);
             Ok(constant.get_result(ctx))
         } else {
@@ -138,7 +143,7 @@ impl PromotableAllocationInterface for DeclareLocalOp {
 }
 
 shared_op!(DeclareLocalOp, |op, ctx| {
-    let ty = op.value_ty(ctx).get_type(ctx);
+    let ty = Typed::get_type(&*op.value_ty(ctx), ctx);
     let name = op.get_result(ctx).name(ctx);
     let value_ty = ty.to_cpp(ctx);
     let out_ty = op.get_result(ctx).get_type(ctx).to_cpp(ctx);
@@ -159,7 +164,7 @@ pub struct DeclareMatrixOp {
 }
 
 fn variable_ptr_ty(ctx: &Context, value_ty: &TypeAttr) -> TypeHandle {
-    let value_ty = value_ty.get_type(ctx);
+    let value_ty = Typed::get_type(value_ty, ctx);
     PointerType::get(ctx, value_ty, AddressSpace::Local).into()
 }
 
@@ -185,7 +190,7 @@ impl LowerOp for DeclareVariableOp {
             AddressSpace::Global(_) => panic!("Unsupported address space for declaration"),
             AddressSpace::Shared => panic!("Should be lowered to block allocation"),
             AddressSpace::Local => {
-                if value_ty.get_type(ctx).deref(ctx).is::<MatrixType>() {
+                if Typed::get_type(&value_ty, ctx).deref(ctx).is::<MatrixType>() {
                     let op = DeclareMatrixOp::new(ctx, value_ty);
                     scope.register_with_result(&op)
                 } else {

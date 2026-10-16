@@ -121,7 +121,11 @@ impl CppConstantAttr for ZeroAttr {
 }
 
 shared_op_with_out!(ConstantOp, |op, ctx| {
-    format_const(ctx, op.get_value(ctx), op.get_result(ctx).get_type(ctx))
+    format_const(
+        ctx,
+        op.get_attr_builtin_constant_value(ctx).unwrap().clone(),
+        op.get_result(ctx).get_type(ctx),
+    )
 });
 
 pub(crate) fn format_const(ctx: &Context, value: AttrObj, ty: TypeHandle) -> String {
