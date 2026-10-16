@@ -545,7 +545,16 @@ pub fn test_powi_constants<R: Runtime, F: Float + num_traits::Float + CubeElemen
         } else {
             as_type![F: -2., -1., 0.5, 2.]
         };
-        let expected = input.map(|x| num_traits::Float::powi(x, exponent));
+        // Compute the reference in `f64`, where every `i32` exponent is exactly
+        // representable. Some targets lower `powi` via `pow(x, n as f32)`, which
+        // loses the exponent's low bits for |n| > 2^24 (e.g. `powi(-1.,
+        // 16_777_217) == 1.` on windows-msvc where `__powisf2` is unsupported).
+        let expected = input.map(|x| {
+            F::new(num_traits::Float::powi(
+                num_traits::cast::<F, f64>(x).unwrap(),
+                exponent,
+            ))
+        });
         for lanes in [1, 2, 4] {
             let input_handle = client.create_from_slice(F::as_bytes(input));
             let output = client.empty(size_of_val(input));
