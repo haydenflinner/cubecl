@@ -93,41 +93,30 @@ fn host_cpu_name(system: &System) -> String {
 
 struct HostVectorRegisters {
     width: u32,
-    count: Option<u32>,
 }
 
 /// Read at runtime, not from `cfg(target_feature)`: the JIT compiles for the CPU it runs on.
 #[cfg(target_arch = "x86_64")]
 fn host_vector_registers() -> HostVectorRegisters {
-    let (width, count) = if std::arch::is_x86_feature_detected!("avx512f") {
-        (512, 32)
+    let width = if std::arch::is_x86_feature_detected!("avx512f") {
+        512
     } else if std::arch::is_x86_feature_detected!("avx") {
-        (256, 16)
+        256
     } else {
-        (128, 16)
+        128
     };
-    let cap = cubecl_llvm::cpu::jit::engine::vector_register_cap().unwrap_or(count);
-    HostVectorRegisters {
-        width,
-        count: Some(count.min(cap)),
-    }
+    HostVectorRegisters { width }
 }
 
 /// LLVM keeps a fixed-width vector on NEON even where SVE is present.
 #[cfg(target_arch = "aarch64")]
 fn host_vector_registers() -> HostVectorRegisters {
-    HostVectorRegisters {
-        width: 128,
-        count: Some(32),
-    }
+    HostVectorRegisters { width: 128 }
 }
 
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 fn host_vector_registers() -> HostVectorRegisters {
-    HostVectorRegisters {
-        width: 128,
-        count: None,
-    }
+    HostVectorRegisters { width: 128 }
 }
 
 impl DeviceService for CpuServer {
@@ -160,8 +149,9 @@ impl DeviceService for CpuServer {
         // measured ~2.5x worse on decode gemv, stages outgrowing what stays
         // resident. GPU-like floor when the topology cannot be read.
         let max_shared_memory_size = affinity::l1d_cache_size().unwrap_or(64 * 1024);
+        let vector_registers = host_vector_registers();
         let topology = HardwareProperties {
-            load_width: 512,
+            load_width: vector_registers.width,
             plane_size_min: 1,
             plane_size_max: 1,
             max_bindings: u32::MAX,

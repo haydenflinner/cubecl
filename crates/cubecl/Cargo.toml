@@ -55,7 +55,7 @@ tracing = [
 
 # Runtimes. A kernel library depends on this crate with none of them on and
 # compiles against no runtime at all; a binary turns on the ones it links.
-cpu = ["cubecl-cpu"]
+cpu = ["cubecl-cpu", "cubecl-cpu/cranelift"]
 # CPU kernels JIT through Cranelift (pure Rust); CUBECL_CPU_JIT=llvm switches back.
 cpu-cranelift = ["cpu", "cubecl-cpu/cranelift"]
 cuda = ["cubecl-cuda"]
