@@ -24,7 +24,6 @@ std = ["cubecl-core/std", "cubecl-runtime/std"]
 tracing = ["cubecl-core/tracing", "cubecl-runtime/tracing", "cubecl-opt/tracing"]
 amdgpu = []
 
-nvptx = ["cubecl-core/nvidia"]
 # Pure-Rust CPU JIT: pliron-llvm -> Cranelift (rustc_codegen_pliron's lowering)
 # instead of LLVM text + O3 + LLJIT. CUBECL_CPU_JIT=llvm selects LLJIT at run time.
 cranelift = [
