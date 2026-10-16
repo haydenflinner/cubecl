@@ -278,7 +278,7 @@ impl PlironCompiler {
         };
 
         PlironEngine::compile(
-            &ctx,
+            &mut ctx,
             module,
             &kernel.settings.kernel_name,
             requirements,

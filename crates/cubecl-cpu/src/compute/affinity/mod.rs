@@ -51,6 +51,13 @@ trait ThreadAffinity {
     /// Bytes of the last level cache, or `None` when it cannot be read.
     fn llc_cache_size() -> Option<usize>;
 
+    /// The performance class of `cpu`'s physical core — bigger is faster on
+    /// hybrid parts (Intel P vs E cores); `None` when the topology cannot be
+    /// read or makes no distinction.
+    fn efficiency_class(_cpu: CoreId) -> Option<u8> {
+        None
+    }
+
     /// Pins the calling thread to `cpu`.
     fn pin_current(cpu: CoreId);
 }
@@ -77,6 +84,9 @@ fn ordered_cores<P: ThreadAffinity>() -> impl Iterator<Item = CoreId> {
             siblings.push(cpu);
         }
     }
+    let class = |cpu: CoreId| P::efficiency_class(cpu).unwrap_or(0);
+    primaries.sort_by_key(|cpu| std::cmp::Reverse(class(*cpu)));
+    siblings.sort_by_key(|cpu| std::cmp::Reverse(class(*cpu)));
     primaries.into_iter().chain(siblings)
 }
 

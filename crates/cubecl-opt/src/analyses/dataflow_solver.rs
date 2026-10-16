@@ -14,7 +14,7 @@ use foldhash::fast::FixedState;
 use pliron::{
     basic_block::BasicBlock,
     graph::HasLabel,
-    linked_list::{ContainsLinkedList, LinkedList},
+    linked_list::ContainsLinkedList,
     operation::OpDbg,
     printable::Printable,
     value::DefiningEntity,
@@ -409,7 +409,7 @@ impl ProgramPoint {
 
     pub fn after_op(ctx: &Context, op: Ptr<Operation>) -> ProgramPoint {
         if let Some(block) = op.deref(ctx).get_parent_block() {
-            if let Some(next) = op.deref(ctx).get_next() {
+            if let Some(next) = op.get_next(ctx) {
                 ProgramPoint::BeforeOpInBlock(block, next)
             } else {
                 ProgramPoint::EndOfBlock(block)
@@ -441,7 +441,7 @@ impl ProgramPoint {
     pub fn prev_op(&self, ctx: &Context) -> Option<Ptr<Operation>> {
         match self {
             ProgramPoint::Operation(op) => Some(*op),
-            ProgramPoint::BeforeOpInBlock(_, op) => op.deref(ctx).get_prev(),
+            ProgramPoint::BeforeOpInBlock(_, op) => op.get_prev(ctx),
             ProgramPoint::EndOfBlock(block) => block.deref(ctx).get_tail(),
         }
     }
@@ -450,7 +450,7 @@ impl ProgramPoint {
         match self {
             ProgramPoint::Operation(_) => false,
             // true if no preceding op
-            ProgramPoint::BeforeOpInBlock(_, op) => op.deref(ctx).get_prev().is_none(),
+            ProgramPoint::BeforeOpInBlock(_, op) => op.get_prev(ctx).is_none(),
             // true if Empty block
             ProgramPoint::EndOfBlock(ptr) => ptr.deref(ctx).get_head().is_none(),
         }
