@@ -452,6 +452,21 @@ mod cranelift {
         module: ModuleOp,
         kernel_name: &str,
     ) -> (cranelift_jit::JITModule, *const u8) {
+        // `PLIRON_TRACE=pliron::bcheck=debug` (any subscriber-worthy filter)
+        // installs a stderr tracing subscriber so the optimizer's
+        // `target: "pliron::*"` debug logs are visible — the JIT installs
+        // no tracing layer of its own.
+        if let Ok(filter) = std::env::var("PLIRON_TRACE") {
+            static ONCE: std::sync::Once = std::sync::Once::new();
+            ONCE.call_once(|| {
+                use tracing_subscriber::prelude::*;
+                let filter = tracing_subscriber::EnvFilter::builder().parse_lossy(filter);
+                let _ = tracing_subscriber::registry()
+                    .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+                    .with(filter)
+                    .try_init();
+            });
+        }
         let mut fb = settings::builder();
         fb.set("opt_level", "speed").unwrap();
         fb.set("is_pic", "false").unwrap();
