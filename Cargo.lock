@@ -712,7 +712,7 @@ dependencies = [
 [[package]]
 name = "cranelift-assembler-x64"
 version = "0.135.5"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "cranelift-assembler-x64-meta",
 ]
@@ -720,7 +720,7 @@ dependencies = [
 [[package]]
 name = "cranelift-assembler-x64-meta"
 version = "0.135.5"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "cranelift-srcgen",
 ]
@@ -749,7 +749,7 @@ dependencies = [
 [[package]]
 name = "cranelift-codegen"
 version = "0.135.5"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "bumpalo",
  "cranelift-assembler-x64",
@@ -778,7 +778,7 @@ dependencies = [
 [[package]]
 name = "cranelift-codegen-meta"
 version = "0.135.5"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "cranelift-assembler-x64-meta",
  "cranelift-codegen-shared",
@@ -829,7 +829,7 @@ dependencies = [
 [[package]]
 name = "cranelift-interpreter"
 version = "0.135.5"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -891,7 +891,7 @@ dependencies = [
 [[package]]
 name = "cranelift-object"
 version = "0.135.5"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "anyhow",
  "cranelift-codegen",
@@ -3550,7 +3550,7 @@ dependencies = [
  "combine",
  "downcast-rs",
  "dyn-clone",
- "hashbrown 0.14.5",
+ "hashbrown 0.17.1",
  "hi_sparse_bitset",
  "indexmap",
  "inventory",
@@ -3563,14 +3563,14 @@ dependencies = [
  "rustc_apfloat",
  "slotmap",
  "smallvec",
- "spin 0.9.9",
+ "spin 0.12.3",
  "thiserror 2.0.20",
 ]
 
 [[package]]
 name = "pliron"
 version = "0.19.0"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "awint",
  "combine",
@@ -3597,15 +3597,16 @@ dependencies = [
 [[package]]
 name = "pliron-cfg"
 version = "0.1.0"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "rustc-hash 2.1.3",
+ "tracing",
 ]
 
 [[package]]
 name = "pliron-clif-lower"
 version = "0.1.0"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "cranelift-codegen",
  "cranelift-frontend",
@@ -3629,7 +3630,7 @@ dependencies = [
 [[package]]
 name = "pliron-clif-opt"
 version = "0.1.0"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "ascent",
  "cranelift-codegen",
@@ -3665,7 +3666,7 @@ dependencies = [
 [[package]]
 name = "pliron-derive"
 version = "0.19.0"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "combine",
  "convert_case 0.11.0",
@@ -3679,7 +3680,7 @@ dependencies = [
 [[package]]
 name = "pliron-ir-opt"
 version = "0.1.0"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "ascent",
  "cranelift-codegen",
@@ -3696,7 +3697,7 @@ dependencies = [
 [[package]]
 name = "pliron-llvm"
 version = "0.19.0"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "bitflags 2.13.1",
  "llvm-sys",
@@ -4028,7 +4029,7 @@ dependencies = [
 [[package]]
 name = "regalloc2"
 version = "0.15.2"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 dependencies = [
  "allocator-api2",
  "bumpalo",
@@ -4155,7 +4156,7 @@ dependencies = [
 [[package]]
 name = "rsasm"
 version = "0.1.3"
-source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=c8037eeac9cba9e34e366517d6e9fd61cd7ea12a#c8037eeac9cba9e34e366517d6e9fd61cd7ea12a"
+source = "git+https://github.com/haydenflinner/rustc_codegen_pliron?rev=86eb3ba9ce9702eda623dbe132948c76e4d5a301#86eb3ba9ce9702eda623dbe132948c76e4d5a301"
 
 [[package]]
 name = "rsqlite-vfs"
@@ -4696,7 +4697,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
