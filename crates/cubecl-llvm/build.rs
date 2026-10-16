@@ -48,5 +48,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracel_llvm_bundler::llvm_sys::link()?;
 
+    // MSVC STL compat: the bundled LLVM objects were compiled by a VS2022+
+    // STL and reference `__std_*` vectorized-algorithm exports that older
+    // toolchains' msvcprt.lib lacks. Emit scalar implementations.
+    #[cfg(target_env = "msvc")]
+    {
+        println!("cargo::rerun-if-changed=src/shared/cpp_shims/msvc_stl_compat.cpp");
+        cc::Build::new()
+            .cpp(true)
+            .file("src/shared/cpp_shims/msvc_stl_compat.cpp")
+            .compile("msvc_stl_compat");
+    }
+
     Ok(())
 }

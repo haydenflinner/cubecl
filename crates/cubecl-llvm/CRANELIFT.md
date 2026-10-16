@@ -78,3 +78,30 @@ simplified the IR by then.
 pliron IR. `PLIRON_CLIF=<substr>` / `PLIRON_VCODE=<substr>` dump CLIF and machine
 code. `PLIRON_TIMING=1` prints pass times. `CUBECL_DEBUG_PLIRON=<dir>` writes the
 LLVM IR before and after O3.
+
+## Windows x64 notes
+
+- `msvc_stl_compat.cpp` (compiled by build.rs on `target_env = "msvc"`)
+  supplies scalar `__std_*` vectorized-algorithm exports the bundled tracel
+  LLVM needs but VS2019's msvcprt lacks (plus `_Thrd_sleep_for`,
+  `__std_init_once_link_alternate_names_and_abort`).
+- `OrcJit` registers `__truncsfbf2`/`__extendhfsf2`/`__truncdfsf2` as
+  absolute symbols — the UCRT doesn't export the bf16 builtins.
+- Call relocs beyond ±2GB (ucrtbase.dll, exe functions vs. VirtualAlloc'd
+  JIT memory) rely on the x64 call veneers in vendored `cranelift-jit`
+  (`jmp [rip]; dq addr`), patch at rustc_codegen_pliron/vendor/cranelift-jit.
+- The Cranelift JIT binds libm names (`sinf`, `powf`, `fmax`, `hypotf`,
+  `expm1`, `roundeven`, `fmodf`, ...) to Rust `std` shims so nothing
+  depends on host CRT exports.
+- Known failure: `test_debug_print` — kernels calling variadic `printf`
+  need Win64 varargs float args duplicated into GPR slots, which Cranelift
+  cannot express; the call is redirected to `__pliron_va8.printf` (a
+  Linux-only thunk) and the JIT rejects the pending asm. A
+  cranelift Win64 variadic-duplication feature or a fixed-arity printf
+  shim would fix it.
+- `tests::*::test_powi_constants` fails identically under
+  `CUBECL_CPU_JIT=llvm` — pre-existing, not a Cranelift bug.
+- i7-12700K (8P+4E): workers are ordered by `EfficiencyClass` so P-core
+  primaries come first (see cubecl-cpu affinity). Unordered dispatch on
+  the hybrid part produced 0.17-1.13 TOPS swings; ordered, f32 stays
+  ~0.75-0.95 TOPS across runs.

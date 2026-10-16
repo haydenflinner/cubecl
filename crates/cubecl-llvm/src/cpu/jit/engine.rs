@@ -19,6 +19,20 @@ use std::{
 /// barrier state, metadata.
 type KernelFn = extern "C" fn(*mut *mut c_void, u32, u32, u32, u32, u32, u32, *mut u32, *mut u64);
 
+// compiler-rt builtins missing from the MSVC runtime; defined in-process so
+// the LLJIT's symbol search (or our explicit absolute mapping) can find them.
+extern "C" fn __truncsfbf2(v: f32) -> u16 {
+    half::bf16::from_f32(v).to_bits()
+}
+
+extern "C" fn __extendhfsf2(v: u16) -> f32 {
+    half::f16::from_bits(v).to_f32()
+}
+
+extern "C" fn __truncdfsf2(v: f64) -> f32 {
+    v as f32
+}
+
 /// Resources and scheduling required for a launch.
 #[derive(Clone, Debug, Default)]
 pub struct KernelRequirements {
@@ -62,6 +76,39 @@ impl OrcJit {
             }
             let main_jd = llvm_sys::orc2::lljit::LLVMOrcLLJITGetMainJITDylib(jit);
             llvm_sys::orc2::LLVMOrcJITDylibAddGenerator(main_jd, generator);
+
+            // compiler-rt builtins the UCRT doesn't provide; needed on Windows
+            // where the process search generator can't see them otherwise.
+            for (name, addr) in [
+                ("__truncsfbf2", __truncsfbf2 as *const () as u64),
+                ("__extendhfsf2", __extendhfsf2 as *const () as u64),
+                ("__truncdfsf2", __truncdfsf2 as *const () as u64),
+            ] {
+                let name_interned = llvm_sys::orc2::lljit::LLVMOrcLLJITMangleAndIntern(
+                    jit,
+                    CString::new(name).unwrap().as_ptr(),
+                );
+                let mut pair = llvm_sys::orc2::LLVMOrcCSymbolMapPair {
+                    Name: name_interned,
+                    Sym: llvm_sys::orc2::LLVMJITEvaluatedSymbol {
+                        Address: addr,
+                        Flags: llvm_sys::orc2::LLVMJITSymbolFlags {
+                            GenericFlags: llvm_sys::orc2::LLVMJITSymbolGenericFlags::LLVMJITSymbolGenericFlagsExported
+                                as u8,
+                            TargetFlags: 0,
+                        },
+                    },
+                };
+                let mu = llvm_sys::orc2::LLVMOrcAbsoluteSymbols(&mut pair as *mut _, 1);
+                let err = llvm_sys::orc2::LLVMOrcJITDylibDefine(main_jd, mu);
+                if !err.is_null() {
+                    let msg_ptr = llvm_sys::error::LLVMGetErrorMessage(err);
+                    let text = CStr::from_ptr(msg_ptr).to_string_lossy().into_owned();
+                    llvm_sys::error::LLVMDisposeErrorMessage(msg_ptr);
+                    llvm_sys::orc2::lljit::LLVMOrcDisposeLLJIT(jit);
+                    return Err(text);
+                }
+            }
 
             Ok(Self(jit))
         }
@@ -144,6 +191,8 @@ pub(crate) fn init_native() {
         pliron_llvm::llvm_sys::target::initialize_native()
             .expect("failed to initialize native target");
     });
+}
+
 impl PlironEngine {
     /// `CUBECL_JIT_TIME=1` prints `cubecl-jit-time <jit> <kernel> <µs>` per
     /// compile (pliron-llvm module in, callable kernel out).
@@ -156,7 +205,7 @@ impl PlironEngine {
         keep_object: bool,
     ) -> pliron::result::Result<Self> {
         let t = std::time::Instant::now();
-        let r = Self::compile_inner(ctx, module, kernel_name, requirements, io);
+        let r = Self::compile_inner(ctx, module, kernel_name, requirements, io, keep_object);
         static TIME: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         if *TIME.get_or_init(|| std::env::var_os("CUBECL_JIT_TIME").is_some()) {
             #[cfg(feature = "cranelift")]
@@ -174,6 +223,7 @@ impl PlironEngine {
         kernel_name: &str,
         requirements: KernelRequirements,
         io: Vec<BufferIOAttr>,
+        keep_object: bool,
     ) -> pliron::result::Result<Self> {
         #[cfg(feature = "cranelift")]
         if use_cranelift() {
@@ -188,8 +238,6 @@ impl PlironEngine {
                 _jit: Jit::Cranelift(jit),
             })));
         }
-        init_native();
-    ) -> pliron::result::Result<Self> {
         init_native();
 
         let llvm_ctx = LLVMContext::default();
@@ -263,6 +311,9 @@ impl PlironEngine {
             .map_err(|err| CompilationError::Generic {
                 reason: format!("kernel symbol '{entrypoint}' not found: {err}"),
                 backtrace: BackTrace::capture(),
+            })?;
+
+        let func: KernelFn = unsafe { std::mem::transmute::<u64, KernelFn>(addr) };
 
         Ok(PlironEngine(Arc::new(JitKernel {
             func,
@@ -323,6 +374,18 @@ pub(crate) fn ir_dump_path(kernel_name: &str) -> Option<std::path::PathBuf> {
 
 /// Optimization pipeline for JIT compilation.
 const PASS_PIPELINE: &CStr = c"default<O3>";
+/// Vector registers the active JIT allocates, when fewer than the ISA has:
+/// Cranelift x64 allocates zmm16-31 only in 512-bit wide mode.
+pub fn vector_register_cap() -> Option<u32> {
+    #[cfg(feature = "cranelift")]
+    if use_cranelift()
+        && (wide_bits() < 512 || std::env::var_os("PLIRON_NO_HIGH_XMM").is_some())
+    {
+        return Some(16);
+    }
+    None
+}
+
 /// `CUBECL_CPU_JIT=llvm` switches a `cranelift` build back to LLJIT.
 #[cfg(feature = "cranelift")]
 fn use_cranelift() -> bool {
@@ -452,6 +515,11 @@ mod cranelift {
         for (callee, stub) in va8::STUBS {
             jb.symbol(*stub, va8::addr(callee));
         }
+        // libm builtins: explicit bindings beat `lookup_with_dlsym`, whose
+        // Windows fallback only checks the exe + ucrtbase.
+        for (name, addr) in libm_symbols() {
+            jb.symbol(name, addr);
+        }
         let mut jit = cranelift_jit::JITModule::new(jb);
         let lw = lower::lower_module(
             &mut jit,
@@ -475,6 +543,100 @@ mod cranelift {
             .unwrap_or_else(|| panic!("kernel symbol '{kernel_name}' not found"));
         let addr = jit.get_finalized_function(id);
         (jit, addr)
+    }
+
+    /// Symbol bindings for the libm calls the lowerer emits, resolved to Rust
+    /// `std` fns so nothing depends on what the host CRT happens to export.
+    /// `__truncsfbf2` is missing from the MSVC CRT entirely.
+    fn libm_symbols() -> Vec<(&'static str, *const u8)> {
+        macro_rules! unary {
+            ($($f:ident: |$v:ident| $e:expr),* $(,)?) => {$(
+                extern "C" fn $f($v: f64) -> f64 { $e }
+            )*};
+        }
+        macro_rules! unaryf {
+            ($($f:ident: |$v:ident| $e:expr),* $(,)?) => {$(
+                extern "C" fn $f($v: f32) -> f32 { $e }
+            )*};
+        }
+        unary! {
+            _sin: |v| v.sin(),
+            _cos: |v| v.cos(),
+            _tan: |v| v.tan(),
+            _asin: |v| v.asin(),
+            _acos: |v| v.acos(),
+            _atan: |v| v.atan(),
+            _exp: |v| v.exp(),
+            _exp2: |v| v.exp2(),
+            _ln: |v| v.ln(),
+            _log2: |v| v.log2(),
+            _log10: |v| v.log10(),
+            _sinh: |v| v.sinh(),
+            _cosh: |v| v.cosh(),
+            _tanh: |v| v.tanh(),
+            _roundeven: |v| v.round_ties_even(),
+            _expm1: |v| v.exp_m1(),
+        }
+        unaryf! {
+            _sinf: |v| v.sin(),
+            _cosf: |v| v.cos(),
+            _tanf: |v| v.tan(),
+            _asinf: |v| v.asin(),
+            _acosf: |v| v.acos(),
+            _atanf: |v| v.atan(),
+            _expf: |v| v.exp(),
+            _exp2f: |v| v.exp2(),
+            _lnf: |v| v.ln(),
+            _log2f: |v| v.log2(),
+            _log10f: |v| v.log10(),
+            _sinhf: |v| v.sinh(),
+            _coshf: |v| v.cosh(),
+            _tanhf: |v| v.tanh(),
+            _roundevenf: |v| v.round_ties_even(),
+            _expm1f: |v| v.exp_m1(),
+        }
+        extern "C" fn _pow(a: f64, b: f64) -> f64 { a.powf(b) }
+        extern "C" fn _powf(a: f32, b: f32) -> f32 { a.powf(b) }
+        extern "C" fn _atan2(a: f64, b: f64) -> f64 { a.atan2(b) }
+        extern "C" fn _atan2f(a: f32, b: f32) -> f32 { a.atan2(b) }
+        extern "C" fn _hypot(a: f64, b: f64) -> f64 { a.hypot(b) }
+        extern "C" fn _hypotf(a: f32, b: f32) -> f32 { a.hypot(b) }
+        extern "C" fn _fmax(a: f64, b: f64) -> f64 { a.max(b) }
+        extern "C" fn _fmaxf(a: f32, b: f32) -> f32 { a.max(b) }
+        extern "C" fn _fmin(a: f64, b: f64) -> f64 { a.min(b) }
+        extern "C" fn _fminf(a: f32, b: f32) -> f32 { a.min(b) }
+        extern "C" fn _fmod(a: f64, b: f64) -> f64 { a % b }
+        extern "C" fn _fmodf(a: f32, b: f32) -> f32 { a % b }
+        extern "C" fn __truncsfbf2(v: f32) -> u16 { half::bf16::from_f32(v).to_bits() }
+        extern "C" fn __extendhfsf2(v: u16) -> f32 { half::f16::from_bits(v).to_f32() }
+
+        vec![
+            ("sin", _sin as *const u8), ("sinf", _sinf as *const u8),
+            ("cos", _cos as *const u8), ("cosf", _cosf as *const u8),
+            ("tan", _tan as *const u8), ("tanf", _tanf as *const u8),
+            ("asin", _asin as *const u8), ("asinf", _asinf as *const u8),
+            ("acos", _acos as *const u8), ("acosf", _acosf as *const u8),
+            ("atan", _atan as *const u8), ("atanf", _atanf as *const u8),
+            ("exp", _exp as *const u8), ("expf", _expf as *const u8),
+            ("exp2", _exp2 as *const u8), ("exp2f", _exp2f as *const u8),
+            ("log", _ln as *const u8), ("logf", _lnf as *const u8),
+            ("log2", _log2 as *const u8), ("log2f", _log2f as *const u8),
+            ("log10", _log10 as *const u8), ("log10f", _log10f as *const u8),
+            ("sinh", _sinh as *const u8), ("sinhf", _sinhf as *const u8),
+            ("cosh", _cosh as *const u8), ("coshf", _coshf as *const u8),
+            ("tanh", _tanh as *const u8), ("tanhf", _tanhf as *const u8),
+            ("roundeven", _roundeven as *const u8),
+            ("roundevenf", _roundevenf as *const u8),
+            ("expm1", _expm1 as *const u8), ("expm1f", _expm1f as *const u8),
+            ("pow", _pow as *const u8), ("powf", _powf as *const u8),
+            ("atan2", _atan2 as *const u8), ("atan2f", _atan2f as *const u8),
+            ("hypot", _hypot as *const u8), ("hypotf", _hypotf as *const u8),
+            ("fmax", _fmax as *const u8), ("fmaxf", _fmaxf as *const u8),
+            ("fmin", _fmin as *const u8), ("fminf", _fminf as *const u8),
+            ("fmod", _fmod as *const u8), ("fmodf", _fmodf as *const u8),
+            ("__truncsfbf2", __truncsfbf2 as *const u8),
+            ("__extendhfsf2", __extendhfsf2 as *const u8),
+        ]
     }
 }
 

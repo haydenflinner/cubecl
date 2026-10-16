@@ -77,6 +77,16 @@ impl ThreadAffinity for Platform {
             .map(|cache| cache.CacheSize as usize)
     }
 
+    /// The record's `EfficiencyClass` — 0 on a homogeneous machine, higher on
+    /// the faster cores of a hybrid part.
+    fn efficiency_class(cpu: CoreId) -> Option<u8> {
+        records(RelationProcessorCore)
+            .iter()
+            .map(|record| unsafe { record.u.Processor() })
+            .find(|processor| cpus_of(&processor.GroupMask[0]).any(|sibling| sibling == cpu))
+            .map(|processor| processor.EfficiencyClass)
+    }
+
     fn pin_current(cpu: CoreId) {
         let affinity = GROUP_AFFINITY {
             Mask: 1 << (cpu.0 % GROUP_STRIDE),
