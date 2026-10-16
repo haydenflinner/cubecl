@@ -21,6 +21,8 @@ type KernelFn = extern "C" fn(*mut *mut c_void, u32, u32, u32, u32, u32, u32, *m
 
 // compiler-rt builtins missing from the MSVC runtime; defined in-process so
 // the LLJIT's symbol search (or our explicit absolute mapping) can find them.
+// compiler-rt declares these with `uint16_t` for the 16-bit float —
+// integer-register ABI, not xmm.
 extern "C" fn __truncsfbf2(v: f32) -> u16 {
     half::bf16::from_f32(v).to_bits()
 }
@@ -519,6 +521,14 @@ mod cranelift {
         // Windows fallback only checks the exe + ucrtbase.
         for (name, addr) in libm_symbols() {
             jb.symbol(name, addr);
+        }
+        // `printf` has no Windows DLL export; forward to our C++ shim.
+        #[cfg(all(target_arch = "x86_64", target_os = "windows"))]
+        {
+            unsafe extern "C" {
+                fn __cubecl_jit_printf(fmt: *const core::ffi::c_char, ...) -> core::ffi::c_int;
+            }
+            jb.symbol("printf", __cubecl_jit_printf as *const u8);
         }
         let mut jit = cranelift_jit::JITModule::new(jb);
         let lw = lower::lower_module(

@@ -262,21 +262,21 @@ opt-level = 3
 
 # pliron-spirv pins upstream pliron; point it at the same pliron as the rest of the workspace.
 [patch."https://github.com/pliron-org/pliron.git"]
-pliron = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-pliron-derive = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
+pliron = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+pliron-derive = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
 
 # The Cranelift CPU JIT (cubecl-llvm `cranelift` feature) reuses
 # rustc_codegen_pliron's lowering, which needs its pliron + Cranelift patches.
 [patch.crates-io]
-pliron = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-pliron-derive = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-pliron-llvm = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-regalloc2 = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-cranelift-codegen = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-cranelift-codegen-meta = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-cranelift-object = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-cranelift-assembler-x64 = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-cranelift-assembler-x64-meta = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-rsasm = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-cranelift-interpreter = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
-cranelift-jit = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4cfff20" }
+pliron = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+pliron-derive = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+pliron-llvm = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+regalloc2 = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+cranelift-codegen = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+cranelift-codegen-meta = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+cranelift-object = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+cranelift-assembler-x64 = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+cranelift-assembler-x64-meta = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+rsasm = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+cranelift-interpreter = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }
+cranelift-jit = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "f2a1d03" }

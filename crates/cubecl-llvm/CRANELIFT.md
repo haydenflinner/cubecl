@@ -93,12 +93,14 @@ LLVM IR before and after O3.
 - The Cranelift JIT binds libm names (`sinf`, `powf`, `fmax`, `hypotf`,
   `expm1`, `roundeven`, `fmodf`, ...) to Rust `std` shims so nothing
   depends on host CRT exports.
-- Known failure: `test_debug_print` — kernels calling variadic `printf`
-  need Win64 varargs float args duplicated into GPR slots, which Cranelift
-  cannot express; the call is redirected to `__pliron_va8.printf` (a
-  Linux-only thunk) and the JIT rejects the pending asm. A
-  cranelift Win64 variadic-duplication feature or a fixed-arity printf
-  shim would fix it.
+- Variadic `printf` from kernels (debug print) resolves to
+  `__cubecl_jit_printf` in `msvc_stl_compat.cpp` — `printf` has no Windows
+  DLL export (it's a header inline over `__stdio_common_vfprintf`), and
+  the SysV `%al` `__pliron_va8` redirect no longer fires on Windows (the
+  va8 machinery itself is Linux-only).
+- LLJIT bf16 compute miscomputes on Windows (identity/dot/encode tests
+  return wrong values even with `__truncsfbf2` resolvable) — pre-existing
+  LLVM-path issue; the Cranelift path is correct and preferred here.
 - `tests::*::test_powi_constants` fails identically under
   `CUBECL_CPU_JIT=llvm` — pre-existing, not a Cranelift bug.
 - i7-12700K (8P+4E): workers are ordered by `EfficiencyClass` so P-core

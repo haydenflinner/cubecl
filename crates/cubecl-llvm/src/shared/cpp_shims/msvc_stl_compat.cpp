@@ -4,8 +4,10 @@
 // unresolved. Signatures/semantics match microsoft/STL's vector_algorithms.cpp.
 // These run inside LLVM's JIT passes only — scalar speed is fine.
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -101,6 +103,18 @@ template <class S, class U> const void* max_el(const void* f, const void* l, boo
 extern "C" __declspec(dllimport) void __stdcall Sleep(unsigned long ms);
 
 extern "C" {
+
+// `printf` has no DLL export on Windows (it is a header inline over
+// `__stdio_common_vfprintf`); JIT'd kernels calling variadic `printf` get
+// this forwarder instead. The caller-side varargs ABI is intact — only the
+// callee needs to exist as a real symbol.
+int __cdecl __cubecl_jit_printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int r = vprintf(fmt, ap);
+    va_end(ap);
+    return r;
+}
 
 void __stdcall _Thrd_sleep_for(unsigned long ms) noexcept {
     Sleep(ms);
