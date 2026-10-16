@@ -1,5 +1,7 @@
 //! Mainly for testing, but can be used as an intermediate CFG dialect that still uses `cube.bool`
 
+use core::ops::Range;
+
 use pliron::{
     attribute::AttrObj,
     basic_block::BasicBlock,
@@ -7,7 +9,7 @@ use pliron::{
     combine::{self, Parser, between, parser::char::spaces, token},
     common_traits::Named,
     identifier::Identifier,
-    indented_block, input_err,
+    input_err,
     irfmt::{
         self,
         parsers::{
@@ -46,6 +48,15 @@ pub struct BranchOp;
 
 #[op_interface_impl]
 impl BranchOpInterface for BranchOp {
+    fn verify_successor_operand_layout(&self, ctx: &Context) -> Result<()> {
+        <Self as OneSuccInterface>::verify(self, ctx)
+    }
+
+    fn successor_operand_range(&self, ctx: &Context, succ_idx: usize) -> Range<usize> {
+        assert!(succ_idx == 0, "BrOp has exactly one successor");
+        0..self.get_operation().deref(ctx).get_num_operands()
+    }
+
     fn successor_operands(&self, ctx: &Context, succ_idx: usize) -> Vec<Value> {
         assert!(succ_idx == 0, "BrOp has exactly one successor");
         self.get_operation().deref(ctx).operands().collect()
@@ -88,8 +99,16 @@ impl BranchOp {
     operands = (condition: BoolType),
     verifier = "succ"
 )]
-#[op_interfaces(IsTerminatorInterface, NResultsInterface<0>, NSuccsInterface<2>, OperandSegmentInterface)]
+#[op_interfaces(IsTerminatorInterface, NResultsInterface<0>, NSuccsInterface<2>)]
 pub struct BranchConditionalOp;
+
+#[op_interface_impl]
+impl OperandSegmentInterface for BranchConditionalOp {
+    fn expected_num_segments(&self, ctx: &Context) -> Option<usize> {
+        // One segment for the condition, and one segment for each successor.
+        Some(self.get_operation().deref(ctx).get_num_successors() + 1)
+    }
+}
 impl BranchConditionalOp {
     /// Create a new [`BranchConditionalOp`].
     pub fn new(
@@ -212,6 +231,21 @@ impl Parsable for BranchConditionalOp {
 
 #[op_interface_impl]
 impl BranchOpInterface for BranchConditionalOp {
+    fn verify_successor_operand_layout(&self, ctx: &Context) -> Result<()> {
+        <Self as OperandSegmentInterface>::verify(self, ctx)?;
+        <Self as NSuccsInterface<2>>::verify(self, ctx)
+    }
+
+    fn successor_operand_range(&self, ctx: &Context, succ_idx: usize) -> Range<usize> {
+        assert!(
+            succ_idx == 0 || succ_idx == 1,
+            "CondBrOp has exactly two successors"
+        );
+
+        // Skip the first segment, which is the condition.
+        self.segment_range(ctx, succ_idx + 1)
+    }
+
     fn successor_operands(&self, ctx: &Context, succ_idx: usize) -> Vec<Value> {
         assert!(
             succ_idx == 0 || succ_idx == 1,
@@ -243,8 +277,16 @@ impl BranchOpInterface for BranchConditionalOp {
     operands = (value: IntegerType),
     attributes = (cf_switch_case_values: IntegerVecAttr)
 )]
-#[op_interfaces(IsTerminatorInterface, NResultsInterface<0>, OperandSegmentInterface)]
+#[op_interfaces(IsTerminatorInterface, NResultsInterface<0>)]
 pub struct SwitchOp;
+
+#[op_interface_impl]
+impl OperandSegmentInterface for SwitchOp {
+    fn expected_num_segments(&self, ctx: &Context) -> Option<usize> {
+        // One segment for the condition, and one segment for each successor.
+        Some(self.get_operation().deref(ctx).get_num_successors() + 1)
+    }
+}
 
 /// One case of a switch statement.
 #[derive(Clone)]
@@ -347,11 +389,12 @@ impl Printable for SwitchOp {
         let cases = self.cases(ctx);
 
         write!(f, "{}[", indented_nl(state))?;
-        indented_block!(state, {
+        {
+            let _indent = state.indent();
             write!(f, "{}", indented_nl(state))?;
             list_with_sep(&cases, pliron::printable::ListSeparator::CharNewline(','))
                 .fmt(ctx, state, f)?;
-        });
+        }
         write!(f, "{}]", indented_nl(state))?;
 
         Ok(())
@@ -489,6 +532,15 @@ impl SwitchOp {
 
 #[op_interface_impl]
 impl BranchOpInterface for SwitchOp {
+    fn verify_successor_operand_layout(&self, ctx: &Context) -> Result<()> {
+        <Self as OperandSegmentInterface>::verify(self, ctx)
+    }
+
+    fn successor_operand_range(&self, ctx: &Context, succ_idx: usize) -> Range<usize> {
+        // Skip the first segment, which is the condition.
+        self.segment_range(ctx, succ_idx + 1)
+    }
+
     fn successor_operands(&self, ctx: &Context, succ_idx: usize) -> Vec<Value> {
         // Skip the first segment, which is the condition.
         self.get_segment(ctx, succ_idx + 1)

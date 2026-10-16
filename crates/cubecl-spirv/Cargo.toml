@@ -66,8 +66,3 @@ cubecl-opt = { path = "../cubecl-opt", version = "=0.11.0-pre.3" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 pliron = { workspace = true, features = ["std"] }
-||||||| parent of d33a92682 (chore: update to pliron 0.18 (#1662))
-cubecl-opt = { path = "../cubecl-opt", version = "=0.11.0-pre.3" }
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-pliron = { workspace = true, features = ["std"] }

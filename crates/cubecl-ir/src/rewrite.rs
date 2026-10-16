@@ -127,7 +127,14 @@ impl MatchRewrite for SimplifyOps {
 pub fn const_operands(ctx: &Context, op: Ptr<Operation>) -> Vec<Option<AttrObj>> {
     op.deref(ctx)
         .operands()
-        .map(|opd| Some(opd.defining_op()?.as_op::<ConstantOp>(ctx)?.get_value(ctx)))
+        .map(|opd| {
+            Some(
+                opd.defining_op()?
+                    .as_op::<ConstantOp>(ctx)?
+                    .get_attr_builtin_constant_value(ctx)?
+                    .clone(),
+            )
+        })
         .collect()
 }
 

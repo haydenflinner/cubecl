@@ -634,9 +634,15 @@ impl CanonicalizeInterface for SwitchOp {
 #[op_interfaces(
     OneRegionInterface,
     SingleBlockRegionInterface,
-    OperandSegmentInterface
 )]
 pub struct RangeLoopOp;
+
+#[op_interface_impl]
+impl OperandSegmentInterface for RangeLoopOp {
+    fn expected_num_segments(&self, _: &Context) -> Option<usize> {
+        Some(2)
+    }
+}
 
 impl RangeLoopOp {
     pub fn new(

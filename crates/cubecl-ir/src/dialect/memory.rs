@@ -7,7 +7,8 @@ use derive_more::From;
 use derive_new::new;
 use pliron::{
     arg_err,
-    attribute::AttrObj,
+    attribute::{Attribute, AttrObj, boxed_attr_cast},
+    builtin::attr_interfaces::TypedAttrInterface,
     builtin::{
         attributes::{TypeAttr, UnitAttr},
         ops::ConstantOp,
@@ -28,7 +29,7 @@ use pliron::{
     },
     parsable::{IntoParseResult, Parsable},
     printable::Printable,
-    r#type::{TypeHandle, type_cast},
+    r#type::{TypeHandle, Typed, type_cast},
     utils::table::{HMap, SmallSet},
     verify_err,
 };
@@ -131,7 +132,7 @@ impl PromotableAllocationInterface for DeclareVariableOp {
         if self.addr_space(ctx).0 == AddressSpace::Local {
             vec![AllocInfo {
                 ptr: self.get_result(ctx),
-                ty: self.value_ty(ctx).get_type(ctx),
+                ty: Typed::get_type(&*self.value_ty(ctx), ctx),
             }]
         } else {
             vec![]
@@ -148,7 +149,10 @@ impl PromotableAllocationInterface for DeclareVariableOp {
             return arg_err!(self.loc(ctx), UnrelatedAllocInfo);
         }
         if let Some(initializer) = self.initializer(ctx).map(|it| it.clone()) {
-            let constant = ConstantOp::new(ctx, initializer);
+            let constant = ConstantOp::new(
+                ctx,
+                boxed_attr_cast::<dyn TypedAttrInterface>(initializer).unwrap(),
+            );
             inserter.insert_op(ctx, &constant);
             Ok(constant.get_result(ctx))
         } else {
@@ -183,7 +187,7 @@ impl DestructurableConstructorOpInterface for DeclareVariableOp {
         {
             return vec![];
         }
-        let value_ty = self.value_ty(ctx).get_type(ctx);
+        let value_ty = Typed::get_type(&*self.value_ty(ctx), ctx);
         let ty = value_ty.deref(ctx);
         let Some(destructurable) = type_cast::<dyn DestructurableTypeInterface>(&*ty) else {
             return vec![];
@@ -211,7 +215,7 @@ impl DestructurableConstructorOpInterface for DeclareVariableOp {
             assert!(it.is::<ZeroAttr>());
         });
         let destructured_type = {
-            let ty = self.value_ty(ctx).get_type(ctx).deref(ctx);
+            let ty = Typed::get_type(&*self.value_ty(ctx), ctx).deref(ctx);
             let destructurable = try_cast_ty!(ty, ctx, dyn DestructurableTypeInterface);
             destructurable.subelement_index_map(ctx).unwrap()
         };
@@ -261,7 +265,7 @@ fn variable_ptr_ty(
     addr_space: &AddressSpaceAttr,
     _align: &IndexAttr,
 ) -> TypeHandle {
-    let value_ty = value_ty.get_type(ctx);
+    let value_ty = Typed::get_type(value_ty, ctx);
     PointerType::get(ctx, value_ty, addr_space.0).into()
 }
 
@@ -290,7 +294,7 @@ fn const_index(ctx: &Context, value: Value) -> Option<usize> {
     let def_op = value.defining_op()?;
     let const_def = def_op.as_op::<ConstantOp>(ctx)?;
     let attr = const_def.get_value(ctx);
-    let attr = attr.downcast_ref::<IndexAttr>()?;
+    let attr = (&*attr as &dyn Attribute).downcast_ref::<IndexAttr>()?;
     Some(attr.0)
 }
 

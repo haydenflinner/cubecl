@@ -1,3 +1,4 @@
+use pliron_llvm::attributes::BytesAttr;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use super::{constant::constant_op, prelude::*};
@@ -11,7 +12,6 @@ use cubecl_core::ir::dialect::{
 };
 use pliron::{
     builtin::{
-        attributes::BytesAttr,
         op_interfaces::{CallOpCallable, SymbolOpInterface},
         ops::ModuleOp,
     },

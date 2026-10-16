@@ -165,9 +165,6 @@ winapi = { version = "^0.3.9", features = [
 
 inflections = "1"
 
-# Crates.io
-pliron = { version = "0.18", default-features = false }
-pliron-llvm = { version = "0.18", default-features = false }
 
 # Path
 # pliron = { path = "../pliron", default-features = false }

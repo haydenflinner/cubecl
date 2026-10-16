@@ -1,3 +1,4 @@
+use pliron::attribute::boxed_attr_cast;
 use super::prelude::*;
 use cubecl_core::ir::dialect::vector::{
     self, CompositeExtractOp, CompositeInsertOp, VectorBroadcastOp, VectorExtractDynamicOp,
@@ -150,6 +151,7 @@ impl ToLLVMDialect for vector::FSumOp {
         let res_ty = self.get_result(ctx).get_type(ctx);
         // `llvm.vector.reduce.fadd` takes the accumulator start value as its first argument.
         let attr = float_attr(ctx, res_ty, 0.0).unwrap_or_else(|| FPSingleAttr::from(0.0).into());
+        let attr = boxed_attr_cast(attr).unwrap();
 
         let res_ty = cube_type_to_llvm(ctx, res_ty);
 

@@ -67,14 +67,14 @@ impl CallableOpInterface for FuncOp {
     }
 
     fn argument_types(&self, ctx: &Context) -> Vec<TypeHandle> {
-        let ty = self.get_attr_func_type(ctx).unwrap().get_type(ctx);
+        let ty = self.get_attr_builtin_func_type(ctx).unwrap().get_type(ctx);
         type_cast::<dyn FunctionTypeInterface>(&*ty.deref(ctx))
             .unwrap()
             .arg_types()
     }
 
     fn result_types(&self, ctx: &Context) -> Vec<TypeHandle> {
-        let ty = self.get_attr_func_type(ctx).unwrap().get_type(ctx);
+        let ty = self.get_attr_builtin_func_type(ctx).unwrap().get_type(ctx);
         type_cast::<dyn FunctionTypeInterface>(&*ty.deref(ctx))
             .unwrap()
             .res_types()
