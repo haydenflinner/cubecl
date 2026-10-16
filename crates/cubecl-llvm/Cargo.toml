@@ -47,6 +47,17 @@ thiserror = { workspace = true }
 # Not used directly, depended on to select its features.
 llvm-sys = { workspace = true }
 
+# Cranelift codegen path (CUBECL_PLIRON_CLIF=1): pliron LLVM dialect straight
+# to a native object, bypassing LLVM IR entirely.
+pliron-clif-lower = { path = "../../../purerust/rustc_codegen_pliron/pliron-clif-lower" }
+cranelift-codegen = { version = "=0.135.5", default-features = false, features = [
+    "std",
+    "host-arch",
+] }
+# Pinned: sibling crates in a cranelift release demand their exact codegen
+# version, and our vendored codegen is 0.135.5.
+cranelift-native = "=0.135.5"
+
 [build-dependencies]
 cc = { workspace = true }
 tracel-llvm-bundler = { workspace = true }

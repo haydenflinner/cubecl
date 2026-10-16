@@ -264,3 +264,21 @@ opt-level = 3
 [patch."https://github.com/pliron-org/pliron.git"]
 pliron = { version = "0.19" }
 pliron-derive = { version = "0.19" }
+
+# Route everything through rustc_codegen_pliron's vendored forks so the same
+# `pliron`/`cranelift` types unify with `pliron-clif-lower` (CUBECL_PLIRON_CLIF
+# JIT path in cubecl-llvm). Vendored crates carry perf patches on top of the
+# same upstream revs; APIs are unchanged.
+[patch.crates-io]
+pliron = { path = "../purerust/rustc_codegen_pliron/vendor/pliron" }
+pliron-llvm = { path = "../purerust/rustc_codegen_pliron/vendor/pliron/pliron-llvm" }
+pliron-derive = { path = "../purerust/rustc_codegen_pliron/vendor/pliron/pliron-derive" }
+regalloc2 = { path = "../purerust/rustc_codegen_pliron/vendor/regalloc2" }
+cranelift-codegen = { path = "../purerust/rustc_codegen_pliron/vendor/cranelift-codegen" }
+cranelift-codegen-meta = { path = "../purerust/rustc_codegen_pliron/vendor/cranelift-codegen-meta" }
+cranelift-object = { path = "../purerust/rustc_codegen_pliron/vendor/cranelift-object" }
+cranelift-assembler-x64 = { path = "../purerust/rustc_codegen_pliron/vendor/cranelift-assembler-x64" }
+cranelift-assembler-x64-meta = { path = "../purerust/rustc_codegen_pliron/vendor/cranelift-assembler-x64-meta" }
+cranelift-interpreter = { path = "../purerust/rustc_codegen_pliron/vendor/cranelift-interpreter" }
+cranelift-reader = { path = "../purerust/rustc_codegen_pliron/vendor/cranelift-reader" }
+rsasm = { path = "../purerust/rustc_codegen_pliron/vendor/rsasm" }
