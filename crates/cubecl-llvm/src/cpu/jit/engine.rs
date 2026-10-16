@@ -242,6 +242,12 @@ impl PlironEngine {
         }
         init_native();
 
+        // CUBECL_PLIRON_CLIF=1: pliron LLVM dialect -> Cranelift -> object,
+        // skipping LLVM entirely. Same OrcJit load path either way.
+        if std::env::var_os("CUBECL_PLIRON_CLIF").is_some() {
+            return Self::compile_clif(ctx, module, kernel_name, requirements, io, keep_object);
+        }
+
         let llvm_ctx = LLVMContext::default();
         let llvm_module = to_llvm_ir::convert_module(ctx, &llvm_ctx, module)?;
         #[cfg(feature = "pliron-dump")]
@@ -280,6 +286,104 @@ impl PlironEngine {
             .unwrap_or_else(|err| {
                 panic!("failed to load compiled object for '{kernel_name}': {err}")
             });
+
+        if keep_object {
+            *engine.0.object_bytes.lock().unwrap() = Some(Bytes::from_bytes_vec(object_bytes));
+        }
+
+        Ok(engine)
+    }
+
+    /// pliron LLVM dialect -> Cranelift -> object -> OrcJit, bypassing LLVM.
+    fn compile_clif(
+        ctx: &mut Context,
+        module: ModuleOp,
+        kernel_name: &str,
+        requirements: KernelRequirements,
+        io: Vec<BufferIOAttr>,
+        keep_object: bool,
+    ) -> pliron::result::Result<Self> {
+        use pliron_clif_lower::{iropt, lower, scan};
+
+        use pliron::{op::Op as _, printable::Printable as _};
+        #[cfg(feature = "pliron-dump")]
+        if let Some(dir) = ir_dump_path(kernel_name) {
+            let text = module
+                .get_operation()
+                .deref(ctx)
+                .print(ctx, &pliron::printable::State::default())
+                .to_string();
+            let _ = std::fs::write(dir.join("kernel.pliron"), text);
+        }
+        let isa = clif_isa();
+
+        // Host SIMD knobs for pliron-ir-opt's leaf planning. CubeCL lines
+        // reach 128 lanes, so vectors wider than 128 bits must split into
+        // native parts rather than per-lane scalars; packed f16 needs both
+        // WIDE_SIMD and NATIVE_F16/F16C to stay SIMD. Read the flags off the
+        // ISA we just built so they can never disagree with the backend.
+        {
+            use pliron_clif_lower::types;
+            use std::sync::atomic::Ordering::Relaxed;
+            let flag = |name: &str| {
+                isa.isa_flags()
+                    .iter()
+                    .find(|v| v.name == name)
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            };
+            types::WIDE_SIMD.store(true, Relaxed);
+            types::NATIVE_F16
+                .store(flag("has_fp16") || flag("has_avx512fp16"), Relaxed);
+            types::F16C.store(flag("has_fp16") || flag("has_f16c"), Relaxed);
+            types::NATIVE_BF16.store(flag("has_avx512bf16"), Relaxed);
+            let wide = if flag("has_avx512f") {
+                512
+            } else if flag("has_avx2") {
+                256
+            } else {
+                0
+            };
+            types::WIDE_F32_BITS.store(wide, Relaxed);
+        }
+
+        let mut st = scan::scan(ctx, module.get_operation());
+
+        // rustc backend's pass order, minus passes that need rustc metadata
+        // (spec/devirt use callgraph tables rustc populates itself).
+        let mut adj = None;
+        iropt::inline::run(
+            ctx,
+            &mut st,
+            false,
+            iropt::inline::SMALL_LIMIT,
+            None,
+            false,
+            None,
+            &mut adj,
+        );
+        iropt::instcombine::run(ctx, &mut st);
+        iropt::memcpyopt::run(ctx, &mut st);
+        iropt::phisimp::run(ctx, &mut st);
+        iropt::sroa::run(ctx, &mut st);
+        iropt::constload::run(ctx, &mut st);
+
+        let object_bytes = lower::lower_to_object(
+            false,
+            false,
+            ctx,
+            &st,
+            isa,
+            kernel_name,
+            &lower::NoHost,
+        );
+
+        let engine = Self::from_object(&object_bytes, kernel_name, requirements, io)
+            .map_err(|err| {
+                pliron::arg_error_noloc!(
+                    "failed to load pliron-clif object for '{kernel_name}': {err}"
+                )
+            })?;
 
         if keep_object {
             *engine.0.object_bytes.lock().unwrap() = Some(Bytes::from_bytes_vec(object_bytes));
@@ -363,6 +467,23 @@ impl Display for PlironEngine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Pliron JIT engine")
     }
+}
+
+/// Host ISA for the Cranelift path: native feature detection, max speed.
+fn clif_isa() -> Arc<dyn cranelift_codegen::isa::TargetIsa> {
+    use cranelift_codegen::settings::{self, Configurable};
+    let mut fb = settings::builder();
+    fb.set("is_pic", "true").unwrap();
+    fb.set("enable_verifier", "false").unwrap();
+    fb.set("preserve_frame_pointers", "false").unwrap();
+    fb.set("opt_level", "speed_and_size").unwrap();
+    fb.set("enable_llvm_abi_extensions", "true").unwrap();
+    fb.enable("enable_multi_ret_implicit_sret").unwrap();
+    let flags = settings::Flags::new(fb);
+    cranelift_native::builder()
+        .expect("native ISA builder")
+        .finish(flags)
+        .expect("native ISA finish")
 }
 
 #[cfg(feature = "pliron-dump")]

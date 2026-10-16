@@ -54,13 +54,15 @@ pliron = { workspace = true, features = ["std"] }
 pliron-llvm = { workspace = true, features = ["llvm-sys"] }
 thiserror = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-pliron-clif-lower = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "e5ac53b", optional = true }
+pliron-clif-lower = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "4dfdd1d", optional = true }
 cranelift-codegen = { version = "0.135.5", optional = true }
 cranelift-jit = { version = "0.135.5", optional = true }
 cranelift-module = { version = "0.135.5", optional = true }
 cranelift-native = { version = "0.135.5", optional = true }
 # Not used directly, depended on to select its features.
 llvm-sys = { workspace = true }
+
+
 
 [build-dependencies]
 cc = { workspace = true }
