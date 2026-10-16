@@ -223,3 +223,24 @@ cfg_aliases = "0.2.2"
 
 [profile.dev.build-override]
 opt-level = 3
+
+
+# pliron-spirv pins upstream pliron; point it at the same pliron as the rest of the workspace.
+[patch."https://github.com/pliron-org/pliron.git"]
+pliron = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+pliron-derive = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+
+# The Cranelift CPU JIT (cubecl-llvm `cranelift` feature) reuses
+# rustc_codegen_pliron's lowering, which needs its pliron + Cranelift patches.
+[patch.crates-io]
+pliron = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+pliron-derive = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+pliron-llvm = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+regalloc2 = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+cranelift-codegen = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+cranelift-codegen-meta = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+cranelift-object = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+cranelift-assembler-x64 = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+cranelift-assembler-x64-meta = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+rsasm = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }
+cranelift-interpreter = { git = "https://github.com/haydenflinner/rustc_codegen_pliron", rev = "c8037eeac9cba9e34e366517d6e9fd61cd7ea12a" }

@@ -90,6 +90,46 @@ fn host_cpu_name(system: &System) -> String {
         .map_or_else(|| format!("CPU {}", std::env::consts::ARCH), String::from)
 }
 
+
+struct HostVectorRegisters {
+    width: u32,
+    count: Option<u32>,
+}
+
+/// Read at runtime, not from `cfg(target_feature)`: the JIT compiles for the CPU it runs on.
+#[cfg(target_arch = "x86_64")]
+fn host_vector_registers() -> HostVectorRegisters {
+    let (width, count) = if std::arch::is_x86_feature_detected!("avx512f") {
+        (512, 32)
+    } else if std::arch::is_x86_feature_detected!("avx") {
+        (256, 16)
+    } else {
+        (128, 16)
+    };
+    let cap = cubecl_llvm::cpu::jit::engine::vector_register_cap().unwrap_or(count);
+    HostVectorRegisters {
+        width,
+        count: Some(count.min(cap)),
+    }
+}
+
+/// LLVM keeps a fixed-width vector on NEON even where SVE is present.
+#[cfg(target_arch = "aarch64")]
+fn host_vector_registers() -> HostVectorRegisters {
+    HostVectorRegisters {
+        width: 128,
+        count: Some(32),
+    }
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+fn host_vector_registers() -> HostVectorRegisters {
+    HostVectorRegisters {
+        width: 128,
+        count: None,
+    }
+}
+
 impl DeviceService for CpuServer {
     fn init(device_id: cubecl_common::device::DeviceId) -> Self {
         let options = RuntimeOptions::default();
